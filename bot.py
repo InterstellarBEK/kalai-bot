@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from postgrest import AsyncPostgrestClient
+from aiohttp import web
 
 from gemini_food import analyze_food_image
 
@@ -26,18 +27,11 @@ db = AsyncPostgrestClient(
 
 TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
 
-# message_id -> analysis dict (rasm natijasini vaqtinchalik saqlash)
 pending_analyses = {}
 
 
 async def update_streak(user_id: int) -> dict:
-    """
-    Streak'ni yangilaydi.
-    Qaytadi: {'streak': int, 'increased': bool}
-    increased=True bo'lsa — bugun birinchi marta log qilingan.
-    """
     today = datetime.now(TASHKENT_TZ).date()
-
     res = await db.from_("users").select("current_streak,last_log_date").eq("id", user_id).execute()
     if not res.data:
         return {"streak": 0, "increased": False}
@@ -48,14 +42,11 @@ async def update_streak(user_id: int) -> dict:
     last_date = date.fromisoformat(last_date_str) if last_date_str else None
 
     if last_date == today:
-        # Bugun allaqachon log qilingan — o'zgarish yo'q
         return {"streak": current_streak, "increased": False}
 
     if last_date == today - timedelta(days=1):
-        # Kecha log qilingan — streak davom etadi
         new_streak = current_streak + 1
     else:
-        # Streak uzilgan yoki birinchi marta
         new_streak = 1
 
     await db.from_("users").update({
@@ -74,18 +65,18 @@ async def start(message: Message):
     existing = await db.from_("users").select("*").eq("telegram_id", tg_id).execute()
 
     if existing.data:
-        await message.answer(f"Qaytib kelganingdan xursandman, {name}! 🎉")
+        await message.answer(f"Qaytib kelganingdan xursandman, {name}!")
     else:
         await db.from_("users").insert({
             "telegram_id": tg_id,
             "first_name": name,
         }).execute()
-        await message.answer(f"Salom, {name}! KalAI'ga xush kelibsiz ✅")
+        await message.answer(f"Salom, {name}! KalAI'ga xush kelibsiz")
 
 
 @dp.message(F.photo)
 async def handle_photo(message: Message):
-    status = await message.answer("📸 Rasmni tahlil qilyapman...")
+    status = await message.answer("Rasmni tahlil qilyapman...")
 
     photo = message.photo[-1]
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
@@ -95,29 +86,29 @@ async def handle_photo(message: Message):
         await bot.download(photo, destination=tmp_path)
         result = await asyncio.to_thread(analyze_food_image, tmp_path)
     except Exception as e:
-        await status.edit_text(f"❌ Xato: {e}")
+        await status.edit_text(f"Xato: {e}")
         return
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
     if not result.get("food_name"):
-        await status.edit_text("❌ Rasmda ovqat topilmadi.")
+        await status.edit_text("Rasmda ovqat topilmadi.")
         return
 
     text = (
-        f"🍽 <b>{result['food_name'].capitalize()}</b>\n\n"
-        f"⚖ Porsiya: ~{result['estimated_grams']}g\n"
-        f"🔥 Kaloriya: <b>{result['calories']}</b> kcal\n"
-        f"🥩 Oqsil: {result['protein']}g\n"
-        f"🧈 Yog': {result['fat']}g\n"
-        f"🍞 Uglevod: {result['carbs']}g\n\n"
+        f"<b>{result['food_name'].capitalize()}</b>\n\n"
+        f"Porsiya: ~{result['estimated_grams']}g\n"
+        f"Kaloriya: <b>{result['calories']}</b> kcal\n"
+        f"Oqsil: {result['protein']}g\n"
+        f"Yog': {result['fat']}g\n"
+        f"Uglevod: {result['carbs']}g\n\n"
         f"<i>Aniqlik: {result['confidence']}</i>"
     )
 
     kb = InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="✅ Saqlash", callback_data="save_photo"),
-        InlineKeyboardButton(text="❌ Bekor", callback_data="cancel_photo"),
+        InlineKeyboardButton(text="Saqlash", callback_data="save_photo"),
+        InlineKeyboardButton(text="Bekor", callback_data="cancel_photo"),
     ]])
 
     edited = await status.edit_text(text, parse_mode="HTML", reply_markup=kb)
@@ -130,7 +121,7 @@ async def save_photo(callback: CallbackQuery):
     result = pending_analyses.pop(msg_id, None)
 
     if not result:
-        await callback.answer("⌛ Vaqt o'tdi yoki ma'lumot yo'q.")
+        await callback.answer("Vaqt o'tdi yoki ma'lumot yo'q.")
         return
 
     food_name_with_portion = f"{result['food_name'].capitalize()} ({result['estimated_grams']}g)"
@@ -146,9 +137,9 @@ async def save_photo(callback: CallbackQuery):
 
     streak_info = await update_streak(1)
 
-    text = f"✅ Saqlandi: <b>{food_name_with_portion}</b> — {result['calories']} kcal"
+    text = f"Saqlandi: <b>{food_name_with_portion}</b> - {result['calories']} kcal"
     if streak_info["increased"]:
-        text += f"\n\n🔥 Streak: <b>{streak_info['streak']} kun</b>"
+        text += f"\n\nStreak: <b>{streak_info['streak']} kun</b>"
 
     await callback.message.edit_text(text, parse_mode="HTML")
     await callback.answer("Saqlandi!")
@@ -161,7 +152,24 @@ async def cancel_photo(callback: CallbackQuery):
     await callback.answer("Bekor qilindi")
 
 
+async def health(request):
+    return web.Response(text="KalAI bot ishlayapti")
+
+
+async def start_web():
+    app = web.Application()
+    app.router.add_get("/", health)
+    app.router.add_get("/health", health)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"Web server started on port {port}")
+
+
 async def main():
+    await start_web()
     await dp.start_polling(bot)
 
 

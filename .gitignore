@@ -16,3 +16,8 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Test images
+osh.jpg.jpg
+test_*.jpg
+test_*.png
