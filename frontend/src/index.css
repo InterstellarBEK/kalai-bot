@@ -1,1 +1,272 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    /* Brand colors */
+    --color-primary: #1D9E75;
+    --color-primary-light: #2BB888;
+    --color-primary-dark: #0F6E56;
+
+    --color-accent: #EF9F27;
+    --color-accent-light: #FAC775;
+    --color-accent-dark: #BA7517;
+
+    /* Background & surface */
+    --color-bg: #DDEEF5;
+    --color-bg-soft: #F0F7FC;
+    --color-surface: #FFFFFF;
+    --color-surface-elevated: #FAFAF7;
+
+    /* Text */
+    --color-text: #1F2937;
+    --color-text-muted: #6B7280;
+    --color-text-soft: #9CA3AF;
+    --color-text-inverse: #FFFFFF;
+
+    /* Semantic */
+    --color-success: #10B981;
+    --color-danger: #EF4444;
+    --color-warning: #F59E0B;
+    --color-input-bg: #F3F4F8;
+    --color-input-text: #374151;
+    --color-nav-inactive: #9CA3AF;
+    --color-info: #3B82F6;
+
+    /* Typography */
+    --font-sans: "Inter", system-ui, sans-serif;
+
+    /* Border radius */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-full: 9999px;
+
+    /* Shadows */
+    --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.04);
+    --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.06);
+    --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+    /* Animations */
+    --animate-bounce-soft: bounce-soft 2s ease-in-out infinite;
+    --animate-wiggle: wiggle 0.5s ease-in-out;
+    --animate-pop: pop 0.3s ease-out;
+    --animate-fade-up: fade-up 0.4s ease-out;
+    --animate-count-up: count-up 0.5s ease-out;
+}
+
+/* Dark mode overrides */
+:root.dark {
+    --color-bg: #0F1419;
+    --color-bg-soft: #1A2028;
+    --color-surface: #1E252E;
+    --color-surface-elevated: #252D38;
+
+    --color-text: #F1F5F9;
+    --color-text-muted: #94A3B8;
+    --color-text-soft: #64748B;
+
+    --color-primary: #2BB888;
+    --color-primary-light: #3DD49C;
+    --color-primary-dark: #1D9E75;
+
+    --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --color-input-bg: #252D38;
+    --color-input-text: #E2E8F0;
+    --color-nav-inactive: #64748B;
+}
+
+:root.dark ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* ============================================
+   GLOBAL DARK MODE OVERRIDES
+   Inline style va bg-white uchun
+   ============================================ */
+:root.dark .bg-white {
+    background-color: #1E252E !important;
+}
+
+:root.dark [style*="background: #ECEEF5"],
+:root.dark [style*="background:#ECEEF5"],
+:root.dark [style*="background: '#ECEEF5'"] {
+    background: #0F1419 !important;
+}
+
+:root.dark [style*="background: #FFFFFF"],
+:root.dark [style*="background:#FFFFFF"],
+:root.dark [style*="background: #FFF"],
+:root.dark [style*="background:#FFF"] {
+    background: #1E252E !important;
+}
+
+:root.dark [style*="background: #F3F4F8"],
+:root.dark [style*="background:#F3F4F8"] {
+    background: #252D38 !important;
+}
+
+/* Text colors fallback */
+:root.dark .text-stone-900:not([class*="bg-[#FFF4D6]"]):not([class*="bg-[#FAD9C8]"]):not([class*="bg-[#DDE3F5]"]) {
+    color: #F1F5F9;
+}
+
+:root.dark .text-stone-700 {
+    color: #CBD5E1;
+}
+
+:root.dark .text-stone-500 {
+    color: #94A3B8;
+}
+
+:root.dark .text-stone-600 {
+    color: #B6C0CC;
+}
+
+/* Light bg sarlavhalar uchun */
+:root.dark h1,
+:root.dark h2,
+:root.dark h3 {
+    color: #F1F5F9;
+}
+
+@keyframes bounce-soft {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-8px);
+    }
+}
+
+@keyframes wiggle {
+
+    0%,
+    100% {
+        transform: rotate(0deg);
+    }
+
+    25% {
+        transform: rotate(-3deg);
+    }
+
+    75% {
+        transform: rotate(3deg);
+    }
+}
+
+@keyframes pop {
+    0% {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+
+    70% {
+        transform: scale(1.05);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes count-up {
+    from {
+        transform: translateY(8px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+body {
+    font-family: var(--font-sans);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+}
+
+#root {
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+.no-select {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-full);
+/* ============================================
+   LOKMA DARK MODE PATCH — pastel + arbitrary
+   ============================================ */
+
+/* Pastel macro cards — text qora qolsin */
+:root.dark [style*="rgb(255, 244, 214)"] .text-stone-900,
+:root.dark [style*="rgb(250, 217, 200)"] .text-stone-900,
+:root.dark [style*="rgb(221, 227, 245)"] .text-stone-900 {
+    color: #1c1917 !important;
+}
+:root.dark [style*="rgb(255, 244, 214)"] .text-stone-700,
+:root.dark [style*="rgb(250, 217, 200)"] .text-stone-700,
+:root.dark [style*="rgb(221, 227, 245)"] .text-stone-700 {
+    color: #44403c !important;
+}
+:root.dark [style*="rgb(255, 244, 214)"] .text-stone-500,
+:root.dark [style*="rgb(250, 217, 200)"] .text-stone-500,
+:root.dark [style*="rgb(221, 227, 245)"] .text-stone-500 {
+    color: #78716c !important;
+}
+
+/* WaterTracker arbitrary bg */
+:root.dark .bg-\[\#DDE3F5\] {
+    background-color: #2A3340 !important;
+}
+:root.dark .text-\[\#5B6AD0\].bg-\[\#DDE3F5\],
+:root.dark .bg-\[\#DDE3F5\].text-\[\#5B6AD0\] {
+    color: #94A3B8 !important;
+}
+
+/* WaterTracker title + count + undo */
+:root.dark .bg-white .text-gray-900,
+:root.dark .bg-white .text-gray-500 {
+    color: #E2E8F0 !important;
+}
+:root.dark .bg-gray-100 {
+    background-color: #2A3340 !important;
+}
+:root.dark .bg-gray-100.text-gray-500 {
+    color: #94A3B8 !important;
+}
+}

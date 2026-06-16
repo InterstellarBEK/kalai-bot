@@ -18,3 +18,20 @@ export function getTelegramId(): number {
 export function getTelegramFirstName(): string | undefined {
     return tg?.initDataUnsafe?.user?.first_name
 }
+
+export function getStartParam(): string | null {
+    return tg?.initDataUnsafe?.start_param ?? null
+}
+
+export function openInvoice(link: string): Promise<'paid' | 'cancelled' | 'failed' | 'pending'> {
+    return new Promise((resolve) => {
+        if (!tg?.openInvoice) {
+            window.open(link, '_blank')
+            resolve('pending')
+            return
+        }
+        tg.openInvoice(link, (status: string) => {
+            resolve(status as 'paid' | 'cancelled' | 'failed' | 'pending')
+        })
+    })
+}
