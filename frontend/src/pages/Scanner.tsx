@@ -6,6 +6,7 @@ import { addCoinsForLog, COINS_PER_LOG } from '../coins';
 import Bekjon from '../components/Bekjon';
 import { useTranslation } from '../i18n';
 import BarcodeScanner from '../BarcodeScanner';
+import CameraCapture from '../CameraCapture';
 import { lookupBarcode } from '../openfoodfacts';
 import { uzLatinToCyrl } from '../transliterate';
 
@@ -30,13 +31,21 @@ export default function Scanner() {
     const [saved, setSaved] = useState(false);
     const [result, setResult] = useState<AnalysisResult | null>(null);
     const [scannerOpen, setScannerOpen] = useState(false);
+    const [cameraOpen, setCameraOpen] = useState(false);
     const [lookingUp, setLookingUp] = useState(false);
-    const cameraInputRef = useRef<HTMLInputElement>(null);
     const galleryInputRef = useRef<HTMLInputElement>(null);
 
     const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        setPhoto(file);
+        setPhotoUrl(URL.createObjectURL(file));
+        setResult(null);
+        setSaved(false);
+    };
+
+    const handleCameraCapture = (file: File) => {
+        setCameraOpen(false);
         setPhoto(file);
         setPhotoUrl(URL.createObjectURL(file));
         setResult(null);
@@ -115,7 +124,6 @@ export default function Scanner() {
         setPhotoUrl(null);
         setResult(null);
         setSaved(false);
-        if (cameraInputRef.current) cameraInputRef.current.value = '';
         if (galleryInputRef.current) galleryInputRef.current.value = '';
     };
 
@@ -166,14 +174,6 @@ export default function Scanner() {
                     </p>
                 </motion.div>
 
-                <input
-                    ref={cameraInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhotoSelect}
-                    className="hidden"
-                />
                 <input
                     ref={galleryInputRef}
                     type="file"
@@ -241,7 +241,7 @@ export default function Scanner() {
                             <div className="grid grid-cols-[1fr_auto] gap-2.5">
                                 <motion.button
                                     whileTap={{ scale: 0.98 }}
-                                    onClick={() => cameraInputRef.current?.click()}
+                                    onClick={() => setCameraOpen(true)}
                                     className="text-left rounded-[1.5rem] p-5 flex items-center gap-4 relative overflow-hidden"
                                     style={{
                                         background: 'linear-gradient(135deg, #6B7AE0 0%, #5B6AD0 60%, #4A58B8 100%)',
@@ -271,18 +271,24 @@ export default function Scanner() {
                                 <motion.button
                                     whileTap={{ scale: 0.96 }}
                                     onClick={() => galleryInputRef.current?.click()}
-                                    aria-label={t('scan_gallery') || 'Galereya'}
-                                    className="rounded-[1.5rem] flex flex-col items-center justify-center px-4 gap-1 bg-white dark:bg-[#1E252E]"
-                                    style={{ boxShadow: '0 8px 20px -10px rgba(91, 106, 208, 0.25)' }}
+                                    aria-label={t('scan_gallery')}
+                                    className="rounded-[1.5rem] flex flex-col items-center justify-center px-4 gap-1.5 relative overflow-hidden"
+                                    style={{
+                                        background: 'linear-gradient(135deg, #F4F1FF 0%, #E8E4FA 100%)',
+                                        boxShadow: '0 8px 22px -10px rgba(91, 106, 208, 0.35), inset 0 0 0 1px rgba(91, 106, 208, 0.12)',
+                                    }}
                                 >
                                     <div
-                                        className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl"
-                                        style={{ background: 'linear-gradient(135deg, #F4F1FF 0%, #E8E4FA 100%)' }}
+                                        className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl"
+                                        style={{
+                                            background: 'linear-gradient(135deg, #FFFFFF 0%, #F0EDFF 100%)',
+                                            boxShadow: '0 4px 10px -4px rgba(91, 106, 208, 0.3)',
+                                        }}
                                     >
                                         🖼
                                     </div>
-                                    <div className="text-[11px] font-bold text-stone-700 dark:text-slate-300 leading-none">
-                                        {t('scan_gallery') || 'Galereya'}
+                                    <div className="text-[11px] font-extrabold leading-none" style={{ color: '#4A58B8' }}>
+                                        {t('scan_gallery')}
                                     </div>
                                 </motion.button>
                             </div>
@@ -459,6 +465,12 @@ export default function Scanner() {
                 open={scannerOpen}
                 onClose={() => setScannerOpen(false)}
                 onDetected={handleBarcodeDetected}
+            />
+
+            <CameraCapture
+                open={cameraOpen}
+                onClose={() => setCameraOpen(false)}
+                onCapture={handleCameraCapture}
             />
         </div>
     );
