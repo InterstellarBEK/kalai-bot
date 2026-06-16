@@ -31,7 +31,8 @@ export default function Scanner() {
     const [result, setResult] = useState<AnalysisResult | null>(null);
     const [scannerOpen, setScannerOpen] = useState(false);
     const [lookingUp, setLookingUp] = useState(false);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
+    const galleryInputRef = useRef<HTMLInputElement>(null);
 
     const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -114,7 +115,8 @@ export default function Scanner() {
         setPhotoUrl(null);
         setResult(null);
         setSaved(false);
-        if (inputRef.current) inputRef.current.value = '';
+        if (cameraInputRef.current) cameraInputRef.current.value = '';
+        if (galleryInputRef.current) galleryInputRef.current.value = '';
     };
 
     const handleSave = async () => {
@@ -165,10 +167,17 @@ export default function Scanner() {
                 </motion.div>
 
                 <input
-                    ref={inputRef}
+                    ref={cameraInputRef}
                     type="file"
                     accept="image/*"
                     capture="environment"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                />
+                <input
+                    ref={galleryInputRef}
+                    type="file"
+                    accept="image/*"
                     onChange={handlePhotoSelect}
                     className="hidden"
                 />
@@ -229,35 +238,54 @@ export default function Scanner() {
                                 </p>
                             </div>
 
-                            <motion.button
-                                whileTap={{ scale: 0.98 }}
-                                onClick={() => inputRef.current?.click()}
-                                className="w-full text-left rounded-[1.5rem] p-5 flex items-center gap-4 relative overflow-hidden"
-                                style={{
-                                    background: 'linear-gradient(135deg, #6B7AE0 0%, #5B6AD0 60%, #4A58B8 100%)',
-                                    boxShadow: '0 12px 28px -10px rgba(91, 106, 208, 0.55)',
-                                }}
-                            >
-                                <div
-                                    className="absolute -right-6 -top-6 w-28 h-28 rounded-full opacity-20"
-                                    style={{ background: 'radial-gradient(circle, #fff 0%, transparent 70%)' }}
-                                />
-                                <div
-                                    className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0"
-                                    style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)' }}
+                            <div className="grid grid-cols-[1fr_auto] gap-2.5">
+                                <motion.button
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => cameraInputRef.current?.click()}
+                                    className="text-left rounded-[1.5rem] p-5 flex items-center gap-4 relative overflow-hidden"
+                                    style={{
+                                        background: 'linear-gradient(135deg, #6B7AE0 0%, #5B6AD0 60%, #4A58B8 100%)',
+                                        boxShadow: '0 12px 28px -10px rgba(91, 106, 208, 0.55)',
+                                    }}
                                 >
-                                    📷
-                                </div>
-                                <div className="flex-1 min-w-0 relative">
-                                    <div className="text-white font-extrabold text-[16px] leading-tight">
-                                        {t('scan_method_photo_title')}
+                                    <div
+                                        className="absolute -right-6 -top-6 w-28 h-28 rounded-full opacity-20"
+                                        style={{ background: 'radial-gradient(circle, #fff 0%, transparent 70%)' }}
+                                    />
+                                    <div
+                                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0"
+                                        style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)' }}
+                                    >
+                                        📷
                                     </div>
-                                    <div className="text-white/75 text-[12px] font-medium mt-0.5 leading-snug">
-                                        {t('scan_method_photo_sub')}
+                                    <div className="flex-1 min-w-0 relative">
+                                        <div className="text-white font-extrabold text-[16px] leading-tight">
+                                            {t('scan_method_photo_title')}
+                                        </div>
+                                        <div className="text-white/75 text-[12px] font-medium mt-0.5 leading-snug">
+                                            {t('scan_method_photo_sub')}
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="text-white/80 text-lg relative">→</div>
-                            </motion.button>
+                                </motion.button>
+
+                                <motion.button
+                                    whileTap={{ scale: 0.96 }}
+                                    onClick={() => galleryInputRef.current?.click()}
+                                    aria-label={t('scan_gallery') || 'Galereya'}
+                                    className="rounded-[1.5rem] flex flex-col items-center justify-center px-4 gap-1 bg-white dark:bg-[#1E252E]"
+                                    style={{ boxShadow: '0 8px 20px -10px rgba(91, 106, 208, 0.25)' }}
+                                >
+                                    <div
+                                        className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl"
+                                        style={{ background: 'linear-gradient(135deg, #F4F1FF 0%, #E8E4FA 100%)' }}
+                                    >
+                                        🖼
+                                    </div>
+                                    <div className="text-[11px] font-bold text-stone-700 dark:text-slate-300 leading-none">
+                                        {t('scan_gallery') || 'Galereya'}
+                                    </div>
+                                </motion.button>
+                            </div>
 
                             <motion.button
                                 whileTap={{ scale: 0.98 }}

@@ -39,8 +39,7 @@ export default function LanguageScriptPicker({ onComplete }: Props) {
     return (
         <div
             className="min-h-screen flex flex-col items-center justify-center px-6"
-            style={{ background: '#ECEEF5', fontFamily: FONT }}
-        >
+            style={{ background: 'var(--color-bg)', fontFamily: FONT }}        >
             <AnimatePresence mode="wait">
                 {step === 'lang' && (
                     <motion.div

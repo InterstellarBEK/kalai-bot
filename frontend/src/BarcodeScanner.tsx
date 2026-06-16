@@ -14,45 +14,50 @@ export default function BarcodeScanner({ open, onClose, onDetected }: Props) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const readerRef = useRef<BrowserMultiFormatReader | null>(null);
     const controlsRef = useRef<{ stop: () => void } | null>(null);
+    const streamRef = useRef<MediaStream | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [scanning, setScanning] = useState(false);
+    const [manualOpen, setManualOpen] = useState(false);
+    const [manualCode, setManualCode] = useState('');
 
     useEffect(() => {
-        if (!open) return;
+        if (!open || manualOpen) return;
         let cancelled = false;
 
         async function start() {
             try {
                 setError(null);
                 setScanning(true);
+
+                // 1. Kamera stream'ni qo'lda olamiz (Telegram WebView uchun ishonchli)
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                    audio: false,
+                });
+                if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+                streamRef.current = stream;
+
+                const video = videoRef.current!;
+                video.srcObject = stream;
+                video.setAttribute('playsinline', 'true');
+                video.muted = true;
+                await video.play().catch(() => { });
+
+                // 2. ZXing'ni shu stream ustida ishga tushiramiz
                 const reader = new BrowserMultiFormatReader();
                 readerRef.current = reader;
-
-                // Telefon orqa kamerasini afzal ko'rish
-                let deviceId: string | undefined;
-                try {
-                    const devices = await navigator.mediaDevices.enumerateDevices();
-                    const cams = devices.filter(d => d.kind === 'videoinput');
-                    const rear = cams.find(d => /back|rear|environment/i.test(d.label));
-                    deviceId = rear?.deviceId || cams[cams.length - 1]?.deviceId;
-                } catch { }
-
-                const controls = await reader.decodeFromVideoDevice(
-                    deviceId,
-                    videoRef.current!,
-                    (result, _err, ctrl) => {
-                        if (cancelled) return;
-                        if (result) {
-                            const code = result.getText();
-                            try { navigator.vibrate?.(80); } catch { }
-                            ctrl.stop();
-                            onDetected(code);
-                        }
+                const controls = await reader.decodeFromVideoElement(video, (result, _err, ctrl) => {
+                    if (cancelled) return;
+                    if (result) {
+                        const code = result.getText();
+                        try { navigator.vibrate?.(80); } catch { }
+                        ctrl.stop();
+                        onDetected(code);
                     }
-                );
+                });
                 controlsRef.current = controls;
             } catch (e: any) {
-                console.error(e);
+                console.error('[BarcodeScanner]', e);
                 setError(e?.message || 'camera_error');
                 setScanning(false);
             }
@@ -65,9 +70,19 @@ export default function BarcodeScanner({ open, onClose, onDetected }: Props) {
             controlsRef.current?.stop();
             controlsRef.current = null;
             readerRef.current = null;
+            streamRef.current?.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
             setScanning(false);
         };
-    }, [open, onDetected]);
+    }, [open, manualOpen, onDetected]);
+
+    function submitManual() {
+        const code = manualCode.trim();
+        if (!/^\d{6,14}$/.test(code)) return;
+        onDetected(code);
+        setManualCode('');
+        setManualOpen(false);
+    }
 
     return (
         <AnimatePresence>
@@ -84,6 +99,7 @@ export default function BarcodeScanner({ open, onClose, onDetected }: Props) {
                         className="absolute inset-0 w-full h-full object-cover"
                         playsInline
                         muted
+                        autoPlay
                     />
 
                     {/* Dark overlay with cutout */}
@@ -104,7 +120,7 @@ export default function BarcodeScanner({ open, onClose, onDetected }: Props) {
                                     }`}
                             />
                         ))}
-                        {scanning && !error && (
+                        {scanning && !error && !manualOpen && (
                             <motion.div
                                 initial={{ top: '8%' }}
                                 animate={{ top: ['8%', '88%', '8%'] }}
@@ -128,20 +144,52 @@ export default function BarcodeScanner({ open, onClose, onDetected }: Props) {
                         <div className="w-10" />
                     </div>
 
-                    {/* Bottom hint / error */}
-                    <div className="absolute bottom-0 left-0 right-0 pb-[max(env(safe-area-inset-bottom),1.5rem)] px-6 text-center">
-                        {error ? (
+                    {/* Bottom area */}
+                    <div className="absolute bottom-0 left-0 right-0 pb-[max(env(safe-area-inset-bottom),1.5rem)] px-6 text-center space-y-3">
+                        {error && (
                             <div className="bg-black/55 backdrop-blur-md rounded-2xl p-4 text-white">
                                 <div className="text-sm mb-3">{t('bc_camera_error')}</div>
-                                <button
-                                    onClick={onClose}
-                                    className="px-5 py-2 rounded-full bg-white text-black text-sm font-semibold"
-                                >
-                                    {t('bc_close')}
-                                </button>
+                            </div>
+                        )}
+                        {!error && !manualOpen && (
+                            <div className="text-white/85 text-sm">{t('bc_hint')}</div>
+                        )}
+
+                        {/* Manual barcode entry */}
+                        {manualOpen ? (
+                            <div className="bg-black/65 backdrop-blur-md rounded-2xl p-4 space-y-3">
+                                <input
+                                    autoFocus
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={manualCode}
+                                    onChange={(e) => setManualCode(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="8690000000000"
+                                    className="w-full px-4 py-3 rounded-xl bg-white/10 text-white text-center text-lg tracking-widest placeholder-white/40 focus:outline-none focus:bg-white/15"
+                                />
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => { setManualOpen(false); setManualCode(''); }}
+                                        className="flex-1 py-3 rounded-xl bg-white/15 text-white text-sm font-medium active:scale-95 transition"
+                                    >
+                                        {t('bc_close')}
+                                    </button>
+                                    <button
+                                        onClick={submitManual}
+                                        disabled={!/^\d{6,14}$/.test(manualCode.trim())}
+                                        className="flex-1 py-3 rounded-xl bg-[#5B6AD0] text-white text-sm font-semibold active:scale-95 transition disabled:opacity-40"
+                                    >
+                                        OK
+                                    </button>
+                                </div>
                             </div>
                         ) : (
-                            <div className="text-white/85 text-sm">{t('bc_hint')}</div>
+                            <button
+                                onClick={() => setManualOpen(true)}
+                                className="px-5 py-2.5 rounded-full bg-white/15 backdrop-blur-md text-white text-sm font-medium active:scale-95 transition"
+                            >
+                                ⌨️ {t('bc_manual') || 'Qo\'lda kiritish'}
+                            </button>
                         )}
                     </div>
                 </motion.div>
