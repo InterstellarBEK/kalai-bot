@@ -28,6 +28,7 @@ db = AsyncPostgrestClient(
 
 TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
 UTC_TZ = ZoneInfo("UTC")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://kalai-bot.vercel.app")
 REMINDER_HOUR = 20
 WEEKLY_REPORT_HOUR = 9
 WEEKDAYS_UZ = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"]
@@ -73,16 +74,54 @@ async def start(message: Message):
     tg_id = message.from_user.id
     name = message.from_user.first_name
 
-    existing = await db.from_("users").select("*").eq("telegram_id", tg_id).execute()
+    existing = await db.from_("users").select("telegram_id").eq("telegram_id", tg_id).execute()
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚀 Lokma'ni ochish", web_app={"url": WEBAPP_URL})],
+        [
+            InlineKeyboardButton(text="📸 Rasmdan tahlil", callback_data="hint_photo"),
+            InlineKeyboardButton(text="🔥 Streak", callback_data="hint_streak"),
+        ],
+    ])
 
     if existing.data:
-        await message.answer(f"Qaytib kelganingdan xursandman, {name}!")
+        text = (
+            f"<b>Qaytib kelganingdan xursandman, {name}!</b> 🐺\n\n"
+            f"Bekjon seni kutib turibdi. Bugungi kaloriyangni tekshir 👇"
+        )
     else:
         await db.from_("users").insert({
             "telegram_id": tg_id,
             "first_name": name,
         }).execute()
-        await message.answer(f"Salom, {name}! Lokma'ga xush kelibsiz")
+        text = (
+            f"<b>Salom, {name}!</b> 👋\n\n"
+            f"Men <b>Bekjon</b> — Lokma'ning yo'lboshchisi 🐺\n\n"
+            f"<b>Lokma</b> — O'zbek tilidagi birinchi aqlli kaloriya hisoblovchi:\n\n"
+            f"📸  Taom rasmiga olib — AI darrov kaloriyani aytadi\n"
+            f"🍲  200+ mahalliy taom: osh, manti, somsa, lag'mon...\n"
+            f"🌙  Ramazon rejimi — iftor/saharlik hisobi\n"
+            f"🔥  Streak, suv, vazn, maqsad — hammasi bitta joyda\n\n"
+            f"<i>Ilovani ochib boshlaymizmi?</i>"
+        )
+
+    await message.answer(text, reply_markup=kb, parse_mode="HTML")
+
+
+@dp.callback_query(F.data == "hint_photo")
+async def hint_photo(cb: CallbackQuery):
+    await cb.answer(
+        "Botga taom rasmini yubor — Bekjon kaloriya va makro miqdorini aytib beradi 📸",
+        show_alert=True,
+    )
+
+
+@dp.callback_query(F.data == "hint_streak")
+async def hint_streak(cb: CallbackQuery):
+    await cb.answer(
+        "Har kuni ovqat qo'shsang streak o'sadi. /streak yozib hozirgi holatni ko'r 🔥",
+        show_alert=True,
+    )
 
 
 @dp.message(Command("today"))
@@ -384,10 +423,14 @@ async def send_daily_reminders():
         text = f"🌙 <b>Kechki eslatma</b>\n\nSalom, {name}! Bugun hali ovqat qo'shmagansiz."
         if streak > 0:
             text += f"\n\n🔥 Streak: <b>{streak} kun</b> — yo'qotmang!"
-        text += "\n\n/add bilan qo'shing yoki rasm yuboring."
+        text += "\n\n<i>Lokma'ni ochib bitta rasm yuborish kifoya 👇</i>"
+
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 Lokma'ni ochish", web_app={"url": WEBAPP_URL})],
+        ])
 
         try:
-            await bot.send_message(tg_id, text, parse_mode="HTML")
+            await bot.send_message(tg_id, text, parse_mode="HTML", reply_markup=kb)
             sent += 1
         except Exception as e:
             print(f"Reminder yuborilmadi {tg_id}: {e}")
