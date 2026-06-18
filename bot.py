@@ -9,8 +9,9 @@ from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, LabeledPrice, PreCheckoutQuery
 from postgrest import AsyncPostgrestClient
 from aiohttp import web
+import aiohttp
 
-from gemini_food import analyze_food_image
+from gemini_food import analyze_food_image, analyze_nutrition_label
 
 load_dotenv()
 
@@ -31,7 +32,6 @@ REMINDER_HOUR = 20
 WEEKLY_REPORT_HOUR = 9
 WEEKDAYS_UZ = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"]
 
-# Stars subscription plans
 STARS_PLANS = {
     "weekly": {"stars": 50, "title": "Lokma Premium — Haftalik", "days": 7},
     "monthly": {"stars": 150, "title": "Lokma Premium — Oylik", "days": 30},
@@ -502,7 +502,6 @@ async def weekly_report_loop():
     while True:
         try:
             now = datetime.now(TASHKENT_TZ)
-            # Keyingi dushanba 09:00 (weekday: Mon=0)
             days_until_monday = (0 - now.weekday()) % 7
             next_run = (now + timedelta(days=days_until_monday)).replace(
                 hour=WEEKLY_REPORT_HOUR, minute=0, second=0, microsecond=0
@@ -568,12 +567,95 @@ async def analyze_food_endpoint(request):
             os.remove(tmp_path)
 
 
+async def analyze_label_endpoint(request):
+    """Nutrition label (etiketka) ni Gemini Vision bilan o'qish."""
+    tmp_path = None
+    try:
+        reader = await request.multipart()
+        field = await reader.next()
+
+        if field is None or field.name != "image":
+            return web.json_response({"error": "'image' field kerak"}, status=400)
+
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
+            while True:
+                chunk = await field.read_chunk()
+                if not chunk:
+                    break
+                tmp.write(chunk)
+
+        result = await asyncio.to_thread(analyze_nutrition_label, tmp_path)
+        return web.json_response(result)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+async def barcode_lookup_endpoint(request: web.Request):
+    barcode = request.match_info.get("barcode", "").strip()
+    if not barcode or not barcode.isdigit():
+        return web.json_response({"error": "invalid barcode"}, status=400)
+
+    # Source 1: UPCitemdb trial (no key, ~100/day per IP)
+    try:
+        url = f"https://api.upcitemdb.com/prod/trial/lookup?upc={barcode}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as r:
+                if r.status == 200:
+                    data = await r.json()
+                    if data.get("code") == "OK" and data.get("items"):
+                        item = data["items"][0]
+                        name = item.get("title") or ""
+                        if name:
+                            return web.json_response({
+                                "name": name,
+                                "brand": item.get("brand") or "",
+                                "image": (item.get("images") or [None])[0],
+                                "source": "upcitemdb",
+                            })
+    except Exception as e:
+        print(f"UPCitemdb error: {e}")
+
+    # Source 2: OFF Russia instance (CIS mahsulotlar uchun)
+    try:
+        url = f"https://ru.openfoodfacts.org/api/v2/product/{barcode}.json?fields=product_name,brands,image_small_url,nutriments,serving_quantity"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as r:
+                if r.status == 200:
+                    data = await r.json()
+                    p = data.get("product")
+                    if p and p.get("product_name"):
+                        n = p.get("nutriments") or {}
+                        kcal_raw = n.get("energy-kcal_100g")
+                        if kcal_raw is None and n.get("energy_100g"):
+                            kcal_raw = n["energy_100g"] / 4.184
+                        return web.json_response({
+                            "name": p.get("product_name", ""),
+                            "brand": (p.get("brands") or "").split(",")[0].strip(),
+                            "image": p.get("image_small_url"),
+                            "kcal_per_100g": round(kcal_raw) if kcal_raw else None,
+                            "protein_per_100g": round((n.get("proteins_100g") or 0) * 10) / 10,
+                            "carbs_per_100g": round((n.get("carbohydrates_100g") or 0) * 10) / 10,
+                            "fat_per_100g": round((n.get("fat_100g") or 0) * 10) / 10,
+                            "source": "off_ru",
+                        })
+    except Exception as e:
+        print(f"OFF-ru error: {e}")
+
+    return web.json_response({"error": "not found"}, status=404)
+
+
 async def start_web():
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_get("/", health)
     app.router.add_get("/health", health)
     app.router.add_post("/api/analyze-food", analyze_food_endpoint)
+    app.router.add_post("/api/analyze-label", analyze_label_endpoint)
     app.router.add_post("/api/create-invoice", create_invoice_endpoint)
+    app.router.add_get("/api/barcode-lookup/{barcode}", barcode_lookup_endpoint)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv("PORT", 10000))
@@ -608,7 +690,7 @@ async def pre_checkout(pre_checkout_q: PreCheckoutQuery):
 @dp.message(F.successful_payment)
 async def successful_payment(message: Message):
     payment = message.successful_payment
-    payload = payment.invoice_payload  # format: "premium_{plan}_{telegram_id}"
+    payload = payment.invoice_payload
     parts = payload.split("_")
     if len(parts) != 3 or parts[0] != "premium":
         await message.answer("To'lov qabul qilindi, lekin payload xato. Qo'llab-quvvatlashga yozing.")

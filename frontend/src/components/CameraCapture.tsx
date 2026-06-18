@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslation } from './i18n';
+import { useTranslation } from '../i18n';
 
 interface Props {
     open: boolean;

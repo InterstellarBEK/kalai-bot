@@ -6,8 +6,10 @@ import { addCoinsForLog, COINS_PER_LOG } from '../coins';
 import Bekjon from '../components/Bekjon';
 import { useTranslation } from '../i18n';
 import BarcodeScanner from '../BarcodeScanner';
-import CameraCapture from '../CameraCapture';
-import { lookupBarcode } from '../openfoodfacts';
+import CameraCapture from "../components/CameraCapture";
+import { lookupBarcode, saveUserProduct, type OFFProduct } from '../openfoodfacts';
+import BarcodeApproveModal from '../components/BarcodeApproveModal';
+import BarcodeManualEntryModal, { type ManualProductInput } from '../components/BarcodeManualEntryModal';
 import { uzLatinToCyrl } from '../transliterate';
 
 interface AnalysisResult {
@@ -33,6 +35,9 @@ export default function Scanner() {
     const [scannerOpen, setScannerOpen] = useState(false);
     const [cameraOpen, setCameraOpen] = useState(false);
     const [lookingUp, setLookingUp] = useState(false);
+    const [pendingProduct, setPendingProduct] = useState<OFFProduct | null>(null);
+    const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
+    const [prefill, setPrefill] = useState<{ name: string; brand?: string } | null>(null);
     const galleryInputRef = useRef<HTMLInputElement>(null);
 
     const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,31 +96,94 @@ export default function Scanner() {
         setScannerOpen(false);
         setLookingUp(true);
         try {
-            const p = await lookupBarcode(barcode, lang);
+            const telegramId = getTelegramId() ?? undefined;
+            const p = await lookupBarcode(barcode, lang, telegramId);
             if (!p) {
-                alert(t('bc_not_found'));
+                setPrefill(null);
+                setUnknownBarcode(barcode);
                 return;
             }
-            const telegramId = getTelegramId();
-            if (!telegramId) throw new Error(t('scan_tg_missing'));
-            const name = p.brand ? `${p.name} · ${p.brand}` : p.name;
-            const { error } = await supabase.from('food_logs').insert({
-                user_id: telegramId,
-                food_name: `${name} (100g)`,
-                calories: p.kcal_per_100g,
-                protein: p.protein_per_100g,
-                fat: p.fat_per_100g,
-                carbs: p.carbs_per_100g,
-            });
-            if (error) throw error;
-            await addCoinsForLog();
-            setSaved(true);
-            setTimeout(() => handleReset(), 2200);
+            if (p.incomplete) {
+                setPrefill({ name: p.name, brand: p.brand });
+                setUnknownBarcode(barcode);
+                return;
+            }
+            setPendingProduct(p);
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('scan_save_error');
             alert(`${t('error_prefix')}${msg}`);
         } finally {
             setLookingUp(false);
+        }
+    }
+
+    async function handleApproveProduct(portionG: number) {
+        if (!pendingProduct) return;
+        setSaving(true);
+        try {
+            const telegramId = getTelegramId();
+            if (!telegramId) throw new Error(t('scan_tg_missing'));
+            const ratio = portionG / 100;
+            const fullName = pendingProduct.brand ? `${pendingProduct.name} · ${pendingProduct.brand}` : pendingProduct.name;
+            const { error } = await supabase.from('food_logs').insert({
+                user_id: telegramId,
+                food_name: `${fullName} (${portionG}g)`,
+                calories: Math.round(pendingProduct.kcal_per_100g * ratio),
+                protein: Math.round(pendingProduct.protein_per_100g * ratio * 10) / 10,
+                fat: Math.round(pendingProduct.fat_per_100g * ratio * 10) / 10,
+                carbs: Math.round(pendingProduct.carbs_per_100g * ratio * 10) / 10,
+            });
+            if (error) throw error;
+            await addCoinsForLog();
+            setPendingProduct(null);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2200);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : t('scan_save_error');
+            alert(`${t('error_prefix')}${msg}`);
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function handleManualSubmit(input: ManualProductInput) {
+        if (!unknownBarcode) return;
+        setSaving(true);
+        try {
+            const telegramId = getTelegramId();
+            if (!telegramId) throw new Error(t('scan_tg_missing'));
+            const result = await saveUserProduct({
+                barcode: unknownBarcode,
+                name: input.name,
+                brand: input.brand,
+                kcal_per_100g: input.kcal,
+                protein_per_100g: input.protein,
+                fat_per_100g: input.fat,
+                carbs_per_100g: input.carbs,
+            }, telegramId);
+            if (!result) throw new Error(t('bc_save_failed'));
+
+            const ratio = input.portion / 100;
+            const fullName = input.brand ? `${input.name} · ${input.brand}` : input.name;
+            const { error } = await supabase.from('food_logs').insert({
+                user_id: telegramId,
+                food_name: `${fullName} (${input.portion}g)`,
+                calories: Math.round(input.kcal * ratio),
+                protein: Math.round(input.protein * ratio * 10) / 10,
+                fat: Math.round(input.fat * ratio * 10) / 10,
+                carbs: Math.round(input.carbs * ratio * 10) / 10,
+            });
+            if (error) throw error;
+            await addCoinsForLog();
+            setUnknownBarcode(null);
+            setPrefill(null);
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2200);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : t('scan_save_error');
+            alert(`${t('error_prefix')}${msg}`);
+        } finally {
+            setSaving(false);
         }
     }
 
@@ -471,6 +539,22 @@ export default function Scanner() {
                 open={cameraOpen}
                 onClose={() => setCameraOpen(false)}
                 onCapture={handleCameraCapture}
+            />
+
+            <BarcodeApproveModal
+                product={pendingProduct}
+                saving={saving}
+                onApprove={handleApproveProduct}
+                onCancel={() => setPendingProduct(null)}
+            />
+
+            <BarcodeManualEntryModal
+                barcode={unknownBarcode}
+                saving={saving}
+                prefillName={prefill?.name}
+                prefillBrand={prefill?.brand}
+                onSubmit={handleManualSubmit}
+                onCancel={() => { setUnknownBarcode(null); setPrefill(null); }}
             />
         </div>
     );

@@ -66,6 +66,35 @@ GENERATION_CONFIG = types.GenerateContentConfig(
     response_mime_type="application/json",
 )
 
+LABEL_PROMPT = """Sen oziq-ovqat etiketka tahlilchisisan. Rasmdagi nutrition label (oziqlanish jadvali) ni o'qib qiymatlarni qaytar.
+
+VAZIFA: 100 gram (yoki 100 ml) uchun qiymatlarni topish. Agar jadvalda faqat porsiya (per serving) bo'lsa — proporsional 100g'ga aylantir.
+
+DIQQAT:
+- Energiya kJ va kcal'da bo'lishi mumkin. Faqat KCAL kerak (agar faqat kJ bo'lsa: kcal = kJ ÷ 4.184)
+- "Belki / Белки / Protein / Oqsil" = protein
+- "Yog'lar / Жиры / Fat / Жир" = fat
+- "Uglevodlar / Углеводы / Carbohydrates / Карбогидраты" = carbs
+- Mahsulot nomi va brendi rasmda ko'rinsa — qaytar (yo'q bo'lsa null)
+- O'lchov birligini diqqat bilan o'qi: "g" gram, "kcal" kaloriya
+
+Faqat JSON qaytar:
+{
+  "product_name": "mahsulot nomi yoki null",
+  "brand": "brend nomi yoki null",
+  "kcal_per_100g": 250,
+  "protein_per_100g": 8.5,
+  "fat_per_100g": 12.0,
+  "carbs_per_100g": 30.0,
+  "confidence": "high"
+}
+
+- kcal_per_100g: butun son (10-900 oralig'ida)
+- protein_per_100g, fat_per_100g, carbs_per_100g: bir kasr aniqligida (0-100)
+- confidence: "high" jadval aniq ko'rinmoqda | "medium" qisman | "low" noaniq
+- Etiketka topilmasa yoki o'qib bo'lmasa: {"error": "etiketka aniqlanmadi"}
+"""
+
 
 def analyze_food_image(image_path: str, lang: str = "uz", max_retries: int = 3) -> dict:
     img = Image.open(image_path)
@@ -98,9 +127,47 @@ def analyze_food_image(image_path: str, lang: str = "uz", max_retries: int = 3) 
     raise last_error
 
 
+def analyze_nutrition_label(image_path: str, max_retries: int = 3) -> dict:
+    """Gemini Vision orqali oziq-ovqat etiketkasidagi nutrition jadvalini o'qiydi.
+
+    Returns: {product_name, brand, kcal_per_100g, protein_per_100g,
+              fat_per_100g, carbs_per_100g, confidence} yoki {error}
+    """
+    img = Image.open(image_path)
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=[LABEL_PROMPT, img],
+                config=GENERATION_CONFIG,
+            )
+            text = response.text.strip()
+            if text.startswith("```"):
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+                text = text.strip()
+            return json.loads(text)
+        except Exception as e:
+            last_error = e
+            err = str(e)
+            if any(code in err for code in ("503", "UNAVAILABLE", "500")):
+                if attempt < max_retries - 1:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+            raise
+
+    raise last_error
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Foydalanish: python gemini_food.py <rasm_yo'li>")
+        print("Foydalanish: python gemini_food.py <rasm_yo'li> [--label]")
         sys.exit(1)
-    result = analyze_food_image(sys.argv[1])
+    if len(sys.argv) >= 3 and sys.argv[2] == "--label":
+        result = analyze_nutrition_label(sys.argv[1])
+    else:
+        result = analyze_food_image(sys.argv[1])
     print(json.dumps(result, ensure_ascii=False, indent=2))
