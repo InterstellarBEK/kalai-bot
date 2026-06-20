@@ -445,6 +445,94 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                     </div>
                 </motion.div>
 
+                {/* --- ALTERNATIVE PAYMENT METHODS (COMING SOON) --- */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ ...SPRING, delay: 0.45 }}
+                    className="mb-4"
+                >
+                    <div className="flex items-center gap-2 mb-3">
+                        <div className="flex-1 h-px bg-stone-200 dark:bg-slate-700/60" />
+                        <span className="text-[10px] font-extrabold text-stone-400 dark:text-slate-500 uppercase tracking-wider px-2">
+                            yoki UZS bilan to'lash
+                        </span>
+                        <div className="flex-1 h-px bg-stone-200 dark:bg-slate-700/60" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                        {/* Click */}
+                        <div
+                            className="relative rounded-2xl p-3.5 overflow-hidden bg-white dark:bg-[#1E252E] cursor-not-allowed"
+                            style={{
+                                border: '1.5px solid #E4E7F0',
+                                boxShadow: '0 4px 12px -6px rgba(91, 106, 208, 0.08)',
+                            }}
+                        >
+                            <div className="absolute inset-0 bg-white/60 dark:bg-[#1E252E]/70 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-1.5">
+                                <div className="text-base">🔒</div>
+                                <div
+                                    className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
+                                    style={{ background: 'linear-gradient(135deg, #EF9F27, #FFC56F)' }}
+                                >
+                                    Tez orada
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <div
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-extrabold text-[11px]"
+                                    style={{ background: 'linear-gradient(135deg, #00AEEF, #0086C9)' }}
+                                >
+                                    C
+                                </div>
+                                <span className="text-sm font-extrabold text-stone-900 dark:text-slate-100">
+                                    Click
+                                </span>
+                            </div>
+                            <div className="text-[10px] font-semibold text-stone-500 dark:text-slate-400 leading-tight">
+                                Karta yoki Click hisob
+                            </div>
+                        </div>
+
+                        {/* Payme */}
+                        <div
+                            className="relative rounded-2xl p-3.5 overflow-hidden bg-white dark:bg-[#1E252E] cursor-not-allowed"
+                            style={{
+                                border: '1.5px solid #E4E7F0',
+                                boxShadow: '0 4px 12px -6px rgba(91, 106, 208, 0.08)',
+                            }}
+                        >
+                            <div className="absolute inset-0 bg-white/60 dark:bg-[#1E252E]/70 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-1.5">
+                                <div className="text-base">🔒</div>
+                                <div
+                                    className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
+                                    style={{ background: 'linear-gradient(135deg, #EF9F27, #FFC56F)' }}
+                                >
+                                    Tez orada
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 mb-1.5">
+                                <div
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-extrabold text-[11px]"
+                                    style={{ background: 'linear-gradient(135deg, #33CCCC, #1FA8A8)' }}
+                                >
+                                    P
+                                </div>
+                                <span className="text-sm font-extrabold text-stone-900 dark:text-slate-100">
+                                    Payme
+                                </span>
+                            </div>
+                            <div className="text-[10px] font-semibold text-stone-500 dark:text-slate-400 leading-tight">
+                                Humo, Uzcard, Visa
+                            </div>
+                        </div>
+                    </div>
+
+                    <p className="text-[10px] text-center text-stone-400 dark:text-slate-500 mt-2.5 font-semibold">
+                        UZS to'lov tez orada — hozircha Telegram Stars orqali to'lang
+                    </p>
+                </motion.div>
+
                 {/* --- TRUST LINE --- */}
                 <motion.div
                     initial={{ opacity: 0 }}

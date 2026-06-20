@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import hashlib
 import os
 import tempfile
 from datetime import date, datetime, timedelta
@@ -28,7 +30,6 @@ db = AsyncPostgrestClient(
 
 TASHKENT_TZ = ZoneInfo("Asia/Tashkent")
 UTC_TZ = ZoneInfo("UTC")
-WEBAPP_URL = os.getenv("WEBAPP_URL", "https://kalai-bot.vercel.app")
 REMINDER_HOUR = 20
 WEEKLY_REPORT_HOUR = 9
 WEEKDAYS_UZ = ["Du", "Se", "Ch", "Pa", "Ju", "Sh", "Ya"]
@@ -38,6 +39,29 @@ STARS_PLANS = {
     "monthly": {"stars": 150, "title": "Lokma Premium — Oylik", "days": 30},
     "yearly": {"stars": 1200, "title": "Lokma Premium — Yillik", "days": 365},
 }
+
+# ============ Click + Payme plans (UZS) ============
+CLICK_PLANS = {
+    "weekly":  {"amount": 7900,   "days": 7,   "title": "Lokma Premium — Haftalik"},
+    "monthly": {"amount": 19900,  "days": 30,  "title": "Lokma Premium — Oylik"},
+    "yearly":  {"amount": 149000, "days": 365, "title": "Lokma Premium — Yillik"},
+}
+
+CLICK_MERCHANT_ID = os.getenv("CLICK_MERCHANT_ID", "")
+CLICK_SERVICE_ID = os.getenv("CLICK_SERVICE_ID", "")
+CLICK_SECRET_KEY = os.getenv("CLICK_SECRET_KEY", "")
+CLICK_MERCHANT_USER_ID = os.getenv("CLICK_MERCHANT_USER_ID", "")
+BOT_USERNAME = os.getenv("BOT_USERNAME", "kalai_test_bot")
+
+# Payme — narx UZS'da, lekin Payme tiyin yuboradi (1 UZS = 100 tiyin)
+PAYME_PLANS = {
+    "weekly":  {"amount": 7900,   "days": 7,   "title": "Lokma Premium — Haftalik"},
+    "monthly": {"amount": 19900,  "days": 30,  "title": "Lokma Premium — Oylik"},
+    "yearly":  {"amount": 149000, "days": 365, "title": "Lokma Premium — Yillik"},
+}
+PAYME_MERCHANT_ID = os.getenv("PAYME_MERCHANT_ID", "")
+PAYME_KEY = os.getenv("PAYME_KEY", "")
+PAYME_KEY_TEST = os.getenv("PAYME_KEY_TEST", "")
 
 pending_analyses = {}
 
@@ -74,54 +98,16 @@ async def start(message: Message):
     tg_id = message.from_user.id
     name = message.from_user.first_name
 
-    existing = await db.from_("users").select("telegram_id").eq("telegram_id", tg_id).execute()
-
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🚀 Lokma'ni ochish", web_app={"url": WEBAPP_URL})],
-        [
-            InlineKeyboardButton(text="📸 Rasmdan tahlil", callback_data="hint_photo"),
-            InlineKeyboardButton(text="🔥 Streak", callback_data="hint_streak"),
-        ],
-    ])
+    existing = await db.from_("users").select("*").eq("telegram_id", tg_id).execute()
 
     if existing.data:
-        text = (
-            f"<b>Qaytib kelganingdan xursandman, {name}!</b> 🐺\n\n"
-            f"Bekjon seni kutib turibdi. Bugungi kaloriyangni tekshir 👇"
-        )
+        await message.answer(f"Qaytib kelganingdan xursandman, {name}!")
     else:
         await db.from_("users").insert({
             "telegram_id": tg_id,
             "first_name": name,
         }).execute()
-        text = (
-            f"<b>Salom, {name}!</b> 👋\n\n"
-            f"Men <b>Bekjon</b> — Lokma'ning yo'lboshchisi 🐺\n\n"
-            f"<b>Lokma</b> — O'zbek tilidagi birinchi aqlli kaloriya hisoblovchi:\n\n"
-            f"📸  Taom rasmiga olib — AI darrov kaloriyani aytadi\n"
-            f"🍲  200+ mahalliy taom: osh, manti, somsa, lag'mon...\n"
-            f"🌙  Ramazon rejimi — iftor/saharlik hisobi\n"
-            f"🔥  Streak, suv, vazn, maqsad — hammasi bitta joyda\n\n"
-            f"<i>Ilovani ochib boshlaymizmi?</i>"
-        )
-
-    await message.answer(text, reply_markup=kb, parse_mode="HTML")
-
-
-@dp.callback_query(F.data == "hint_photo")
-async def hint_photo(cb: CallbackQuery):
-    await cb.answer(
-        "Botga taom rasmini yubor — Bekjon kaloriya va makro miqdorini aytib beradi 📸",
-        show_alert=True,
-    )
-
-
-@dp.callback_query(F.data == "hint_streak")
-async def hint_streak(cb: CallbackQuery):
-    await cb.answer(
-        "Har kuni ovqat qo'shsang streak o'sadi. /streak yozib hozirgi holatni ko'r 🔥",
-        show_alert=True,
-    )
+        await message.answer(f"Salom, {name}! Lokma'ga xush kelibsiz")
 
 
 @dp.message(Command("today"))
@@ -423,14 +409,10 @@ async def send_daily_reminders():
         text = f"🌙 <b>Kechki eslatma</b>\n\nSalom, {name}! Bugun hali ovqat qo'shmagansiz."
         if streak > 0:
             text += f"\n\n🔥 Streak: <b>{streak} kun</b> — yo'qotmang!"
-        text += "\n\n<i>Lokma'ni ochib bitta rasm yuborish kifoya 👇</i>"
-
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🚀 Lokma'ni ochish", web_app={"url": WEBAPP_URL})],
-        ])
+        text += "\n\n/add bilan qo'shing yoki rasm yuboring."
 
         try:
-            await bot.send_message(tg_id, text, parse_mode="HTML", reply_markup=kb)
+            await bot.send_message(tg_id, text, parse_mode="HTML")
             sent += 1
         except Exception as e:
             print(f"Reminder yuborilmadi {tg_id}: {e}")
@@ -637,6 +619,585 @@ async def analyze_label_endpoint(request):
             os.remove(tmp_path)
 
 
+# ============ CLICK payment endpoints ============
+def click_check_sign(data: dict, action: int) -> bool:
+    """Click sign_string MD5 tekshirish."""
+    sign_string = data.get("sign_string", "")
+    parts = [
+        str(data.get("click_trans_id", "")),
+        str(data.get("service_id", "")),
+        CLICK_SECRET_KEY,
+        str(data.get("merchant_trans_id", "")),
+    ]
+    if action == 1:
+        parts.append(str(data.get("merchant_prepare_id", "")))
+    parts.extend([
+        str(data.get("amount", "")),
+        str(action),
+        str(data.get("sign_time", "")),
+    ])
+    calculated = hashlib.md5("".join(parts).encode()).hexdigest()
+    return calculated == sign_string
+
+
+async def click_create_invoice_endpoint(request: web.Request):
+    """Frontend chaqiradi → Click to'lov URL qaytaramiz."""
+    try:
+        data = await request.json()
+        tg_id = int(data.get("telegram_id"))
+        plan = data.get("plan")
+
+        plan_info = CLICK_PLANS.get(plan)
+        if not plan_info:
+            return web.json_response({"error": "Noto'g'ri plan"}, status=400)
+
+        ins = await db.from_("transactions").insert({
+            "telegram_id": tg_id,
+            "provider": "click",
+            "amount": plan_info["amount"],
+            "currency": "UZS",
+            "period_days": plan_info["days"],
+            "status": "pending",
+        }).execute()
+        tx_id = ins.data[0]["id"]
+
+        return_url = f"https://t.me/{BOT_USERNAME}"
+        url = (
+            f"https://my.click.uz/services/pay"
+            f"?service_id={CLICK_SERVICE_ID}"
+            f"&merchant_id={CLICK_MERCHANT_ID}"
+            f"&amount={plan_info['amount']}"
+            f"&transaction_param={tx_id}"
+            f"&return_url={return_url}"
+        )
+        return web.json_response({"invoice_link": url, "tx_id": tx_id})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def click_prepare_endpoint(request: web.Request):
+    """Click → bizga prepare so'rovi (action=0)."""
+    try:
+        form = await request.post()
+        data = {k: str(v) for k, v in form.items()}
+
+        if not click_check_sign(data, 0):
+            return web.json_response({
+                "error": -1, "error_note": "SIGN CHECK FAILED",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": data.get("merchant_trans_id"),
+            })
+
+        try:
+            tx_id = int(data.get("merchant_trans_id"))
+        except (TypeError, ValueError):
+            return web.json_response({
+                "error": -5, "error_note": "Order id invalid",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": data.get("merchant_trans_id"),
+            })
+
+        amount = float(data.get("amount", 0))
+
+        tx_res = await db.from_("transactions").select("*").eq("id", tx_id).execute()
+        if not tx_res.data:
+            return web.json_response({
+                "error": -5, "error_note": "Order not found",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": tx_id,
+            })
+
+        tx = tx_res.data[0]
+        if float(tx["amount"]) != amount:
+            return web.json_response({
+                "error": -2, "error_note": "Incorrect amount",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": tx_id,
+            })
+
+        if tx["status"] == "paid":
+            return web.json_response({
+                "error": -4, "error_note": "Already paid",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": tx_id,
+            })
+
+        return web.json_response({
+            "error": 0, "error_note": "Success",
+            "click_trans_id": data.get("click_trans_id"),
+            "merchant_trans_id": tx_id,
+            "merchant_prepare_id": tx_id,
+        })
+    except Exception as e:
+        return web.json_response({"error": -8, "error_note": str(e)})
+
+
+async def click_complete_endpoint(request: web.Request):
+    """Click → bizga complete so'rovi (action=1)."""
+    try:
+        form = await request.post()
+        data = {k: str(v) for k, v in form.items()}
+
+        if not click_check_sign(data, 1):
+            return web.json_response({
+                "error": -1, "error_note": "SIGN CHECK FAILED",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": data.get("merchant_trans_id"),
+            })
+
+        try:
+            tx_id = int(data.get("merchant_trans_id"))
+        except (TypeError, ValueError):
+            return web.json_response({
+                "error": -5, "error_note": "Order id invalid",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": data.get("merchant_trans_id"),
+            })
+
+        click_error = int(data.get("error", 0))
+
+        tx_res = await db.from_("transactions").select("*").eq("id", tx_id).execute()
+        if not tx_res.data:
+            return web.json_response({
+                "error": -5, "error_note": "Order not found",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": tx_id,
+            })
+
+        tx = tx_res.data[0]
+
+        if click_error < 0:
+            await db.from_("transactions").update({
+                "status": "cancelled",
+                "cancel_time": datetime.now(UTC_TZ).isoformat(),
+                "raw_payload": data,
+            }).eq("id", tx_id).execute()
+            return web.json_response({
+                "error": click_error,
+                "error_note": data.get("error_note", "cancelled"),
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": tx_id,
+                "merchant_confirm_id": tx_id,
+            })
+
+        if tx["status"] == "paid":
+            return web.json_response({
+                "error": 0, "error_note": "Already confirmed",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": tx_id,
+                "merchant_confirm_id": tx_id,
+            })
+
+        days = tx["period_days"]
+        plan_key = next((k for k, v in CLICK_PLANS.items() if v["days"] == days), "monthly")
+
+        try:
+            await db.rpc("activate_subscription", {
+                "p_telegram_id": tx["telegram_id"],
+                "p_plan": plan_key,
+                "p_payment_method": "click",
+                "p_payment_id": str(data.get("click_trans_id")),
+                "p_amount": tx["amount"],
+                "p_currency": "UZS",
+            }).execute()
+        except Exception as e:
+            print(f"[Click] activate_subscription xato: {e}")
+            return web.json_response({
+                "error": -8, "error_note": "Activation failed",
+                "click_trans_id": data.get("click_trans_id"),
+                "merchant_trans_id": tx_id,
+            })
+
+        await db.from_("transactions").update({
+            "status": "paid",
+            "perform_time": datetime.now(UTC_TZ).isoformat(),
+            "provider_tx_id": str(data.get("click_trans_id")),
+            "raw_payload": data,
+        }).eq("id", tx_id).execute()
+
+        try:
+            await bot.send_message(
+                tx["telegram_id"],
+                f"✅ <b>Premium faollashtirildi!</b>\n\n"
+                f"To'lov: Click orqali\n"
+                f"Muddat: {days} kun\n\n"
+                f"Rahmat! 🐺",
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            print(f"[Click] xabar yuborilmadi {tx['telegram_id']}: {e}")
+
+        return web.json_response({
+            "error": 0, "error_note": "Success",
+            "click_trans_id": data.get("click_trans_id"),
+            "merchant_trans_id": tx_id,
+            "merchant_confirm_id": tx_id,
+        })
+    except Exception as e:
+        return web.json_response({"error": -8, "error_note": str(e)})
+
+
+# ============ PAYME merchant JSON-RPC ============
+PAYME_STATE_PENDING = 1
+PAYME_STATE_PAID = 2
+PAYME_STATE_CANCELLED_PENDING = -1
+PAYME_STATE_CANCELLED_PAID = -2
+
+
+def _ts_ms(ts_str) -> int:
+    if not ts_str:
+        return 0
+    if isinstance(ts_str, (int, float)):
+        return int(ts_str)
+    try:
+        dt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return 0
+
+
+def _now_ms() -> int:
+    return int(datetime.now(UTC_TZ).timestamp() * 1000)
+
+
+def _tx_to_payme_state(tx: dict) -> int:
+    status = tx.get("status")
+    if status == "paid":
+        return PAYME_STATE_PAID
+    if status == "cancelled":
+        return PAYME_STATE_CANCELLED_PAID if tx.get("perform_time") else PAYME_STATE_CANCELLED_PENDING
+    return PAYME_STATE_PENDING
+
+
+def payme_auth_ok(request: web.Request) -> bool:
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(auth[6:]).decode()
+        login, key = decoded.split(":", 1)
+        if login != "Paycom":
+            return False
+        valid_keys = [k for k in (PAYME_KEY, PAYME_KEY_TEST) if k]
+        return key in valid_keys
+    except Exception:
+        return False
+
+
+def payme_err(req_id, code, msg_uz="", msg_ru="", msg_en="", data=None):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "error": {
+            "code": code,
+            "message": {
+                "uz": msg_uz or msg_en or "Xato",
+                "ru": msg_ru or msg_en or "Ошибка",
+                "en": msg_en or "Error",
+            },
+        },
+    }
+    if data is not None:
+        payload["error"]["data"] = data
+    return web.json_response(payload)
+
+
+def payme_ok(req_id, result):
+    return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": result})
+
+
+async def _get_tx_by_id(tx_id):
+    try:
+        tx_id = int(tx_id)
+    except (TypeError, ValueError):
+        return None
+    res = await db.from_("transactions").select("*").eq("id", tx_id).execute()
+    return res.data[0] if res.data else None
+
+
+async def _get_tx_by_payme_id(payme_id: str):
+    res = await db.from_("transactions").select("*").eq("provider", "payme").eq("provider_tx_id", payme_id).execute()
+    return res.data[0] if res.data else None
+
+
+async def payme_check_perform(req_id, params):
+    account = params.get("account") or {}
+    amount = params.get("amount", 0)
+    tx_id = account.get("tx_id") or account.get("transaction") or account.get("order_id")
+
+    tx = await _get_tx_by_id(tx_id)
+    if not tx:
+        return payme_err(req_id, -31050, "Buyurtma topilmadi", "Заказ не найден", "Order not found",
+                         data="tx_id")
+    if tx.get("provider") not in ("payme", None):
+        return payme_err(req_id, -31050, "Provider mos kelmaydi", "Провайдер не совпадает", "Wrong provider",
+                         data="tx_id")
+    if int(float(tx["amount"])) * 100 != int(amount):
+        return payme_err(req_id, -31001, "Summa noto'g'ri", "Неверная сумма", "Invalid amount",
+                         data="amount")
+    if tx.get("status") == "paid":
+        return payme_err(req_id, -31051, "Allaqachon to'langan", "Уже оплачено", "Already paid", data="tx_id")
+
+    return payme_ok(req_id, {"allow": True})
+
+
+async def payme_create_tx(req_id, params):
+    payme_id = params.get("id")
+    create_ts = params.get("time") or _now_ms()
+    amount = params.get("amount", 0)
+    account = params.get("account") or {}
+    tx_id = account.get("tx_id") or account.get("transaction") or account.get("order_id")
+
+    # Idempotent: shu Payme id allaqachon mavjudmi?
+    existing = await _get_tx_by_payme_id(str(payme_id)) if payme_id else None
+    if existing:
+        return payme_ok(req_id, {
+            "create_time": _ts_ms(existing.get("created_at")),
+            "transaction": str(existing["id"]),
+            "state": _tx_to_payme_state(existing),
+        })
+
+    tx = await _get_tx_by_id(tx_id)
+    if not tx:
+        return payme_err(req_id, -31050, "Buyurtma topilmadi", "Заказ не найден", "Order not found",
+                         data="tx_id")
+    if int(float(tx["amount"])) * 100 != int(amount):
+        return payme_err(req_id, -31001, "Summa noto'g'ri", "Неверная сумма", "Invalid amount",
+                         data="amount")
+    if tx.get("status") != "pending":
+        return payme_err(req_id, -31008, "Operatsiya bajarib bo'lmaydi", "Невозможно выполнить", "Cannot perform")
+
+    # Bog'lab qo'yamiz
+    await db.from_("transactions").update({
+        "provider": "payme",
+        "provider_tx_id": str(payme_id),
+        "raw_payload": params,
+    }).eq("id", tx["id"]).execute()
+
+    return payme_ok(req_id, {
+        "create_time": create_ts,
+        "transaction": str(tx["id"]),
+        "state": PAYME_STATE_PENDING,
+    })
+
+
+async def payme_perform_tx(req_id, params):
+    payme_id = params.get("id")
+    tx = await _get_tx_by_payme_id(str(payme_id)) if payme_id else None
+    if not tx:
+        return payme_err(req_id, -31003, "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found")
+
+    if tx.get("status") == "paid":
+        # Idempotent
+        return payme_ok(req_id, {
+            "transaction": str(tx["id"]),
+            "perform_time": _ts_ms(tx.get("perform_time")),
+            "state": PAYME_STATE_PAID,
+        })
+
+    if tx.get("status") != "pending":
+        return payme_err(req_id, -31008, "Operatsiya bajarib bo'lmaydi", "Невозможно выполнить", "Cannot perform")
+
+    days = tx["period_days"]
+    plan_key = next((k for k, v in PAYME_PLANS.items() if v["days"] == days), "monthly")
+    now_iso = datetime.now(UTC_TZ).isoformat()
+    now_ms = _now_ms()
+
+    try:
+        await db.rpc("activate_subscription", {
+            "p_telegram_id": tx["telegram_id"],
+            "p_plan": plan_key,
+            "p_payment_method": "payme",
+            "p_payment_id": str(payme_id),
+            "p_amount": tx["amount"],
+            "p_currency": "UZS",
+        }).execute()
+    except Exception as e:
+        print(f"[Payme] activate_subscription xato: {e}")
+        return payme_err(req_id, -31008, "Faollashtirish xatosi", "Ошибка активации", "Activation failed")
+
+    await db.from_("transactions").update({
+        "status": "paid",
+        "perform_time": now_iso,
+    }).eq("id", tx["id"]).execute()
+
+    try:
+        await bot.send_message(
+            tx["telegram_id"],
+            f"✅ <b>Premium faollashtirildi!</b>\n\n"
+            f"To'lov: Payme orqali\n"
+            f"Muddat: {days} kun\n\n"
+            f"Rahmat! 🐺",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        print(f"[Payme] xabar yuborilmadi: {e}")
+
+    return payme_ok(req_id, {
+        "transaction": str(tx["id"]),
+        "perform_time": now_ms,
+        "state": PAYME_STATE_PAID,
+    })
+
+
+async def payme_cancel_tx(req_id, params):
+    payme_id = params.get("id")
+    reason = params.get("reason")
+    tx = await _get_tx_by_payme_id(str(payme_id)) if payme_id else None
+    if not tx:
+        return payme_err(req_id, -31003, "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found")
+
+    if tx.get("status") == "cancelled":
+        # Idempotent
+        return payme_ok(req_id, {
+            "transaction": str(tx["id"]),
+            "cancel_time": _ts_ms(tx.get("cancel_time")),
+            "state": _tx_to_payme_state(tx),
+        })
+
+    now_iso = datetime.now(UTC_TZ).isoformat()
+    now_ms = _now_ms()
+
+    if tx.get("status") == "paid":
+        # Paid'dan keyin bekor — biz refund qilmaymiz, lekin status'ni belgilab qo'yamiz
+        await db.from_("transactions").update({
+            "status": "cancelled",
+            "cancel_time": now_iso,
+            "cancel_reason": reason,
+        }).eq("id", tx["id"]).execute()
+        return payme_ok(req_id, {
+            "transaction": str(tx["id"]),
+            "cancel_time": now_ms,
+            "state": PAYME_STATE_CANCELLED_PAID,
+        })
+
+    # pending'dan bekor
+    await db.from_("transactions").update({
+        "status": "cancelled",
+        "cancel_time": now_iso,
+        "cancel_reason": reason,
+    }).eq("id", tx["id"]).execute()
+    return payme_ok(req_id, {
+        "transaction": str(tx["id"]),
+        "cancel_time": now_ms,
+        "state": PAYME_STATE_CANCELLED_PENDING,
+    })
+
+
+async def payme_check_tx(req_id, params):
+    payme_id = params.get("id")
+    tx = await _get_tx_by_payme_id(str(payme_id)) if payme_id else None
+    if not tx:
+        return payme_err(req_id, -31003, "Tranzaksiya topilmadi", "Транзакция не найдена", "Transaction not found")
+
+    return payme_ok(req_id, {
+        "create_time": _ts_ms(tx.get("created_at")),
+        "perform_time": _ts_ms(tx.get("perform_time")),
+        "cancel_time": _ts_ms(tx.get("cancel_time")),
+        "transaction": str(tx["id"]),
+        "state": _tx_to_payme_state(tx),
+        "reason": tx.get("cancel_reason"),
+    })
+
+
+async def payme_get_statement(req_id, params):
+    from_ms = int(params.get("from", 0))
+    to_ms = int(params.get("to", _now_ms()))
+
+    from_iso = datetime.fromtimestamp(from_ms / 1000, tz=UTC_TZ).isoformat()
+    to_iso = datetime.fromtimestamp(to_ms / 1000, tz=UTC_TZ).isoformat()
+
+    res = (
+        await db.from_("transactions")
+        .select("*")
+        .eq("provider", "payme")
+        .gte("created_at", from_iso)
+        .lte("created_at", to_iso)
+        .execute()
+    )
+    rows = res.data or []
+
+    transactions = []
+    for tx in rows:
+        transactions.append({
+            "id": tx.get("provider_tx_id"),
+            "time": _ts_ms(tx.get("created_at")),
+            "amount": int(float(tx["amount"])) * 100,
+            "account": {"tx_id": str(tx["id"])},
+            "create_time": _ts_ms(tx.get("created_at")),
+            "perform_time": _ts_ms(tx.get("perform_time")),
+            "cancel_time": _ts_ms(tx.get("cancel_time")),
+            "transaction": str(tx["id"]),
+            "state": _tx_to_payme_state(tx),
+            "reason": tx.get("cancel_reason"),
+        })
+    return payme_ok(req_id, {"transactions": transactions})
+
+
+async def payme_endpoint(request: web.Request):
+    if not payme_auth_ok(request):
+        return payme_err(None, -32504, "Ruxsat yo'q", "Нет доступа", "Insufficient privilege")
+
+    try:
+        body = await request.json()
+    except Exception:
+        return payme_err(None, -32700, "Parsing error", "Parsing error", "Parsing error")
+
+    req_id = body.get("id")
+    method = body.get("method")
+    params = body.get("params") or {}
+
+    handlers = {
+        "CheckPerformTransaction": payme_check_perform,
+        "CreateTransaction": payme_create_tx,
+        "PerformTransaction": payme_perform_tx,
+        "CancelTransaction": payme_cancel_tx,
+        "CheckTransaction": payme_check_tx,
+        "GetStatement": payme_get_statement,
+    }
+    handler = handlers.get(method)
+    if not handler:
+        return payme_err(req_id, -32601, "Method topilmadi", "Метод не найден", "Method not found")
+
+    try:
+        return await handler(req_id, params)
+    except Exception as e:
+        print(f"[Payme] {method} xato: {e}")
+        return payme_err(req_id, -32400, str(e), str(e), str(e))
+
+
+async def payme_create_invoice_endpoint(request: web.Request):
+    """Frontend chaqiradi → Payme checkout URL qaytaramiz."""
+    try:
+        data = await request.json()
+        tg_id = int(data.get("telegram_id"))
+        plan = data.get("plan")
+
+        plan_info = PAYME_PLANS.get(plan)
+        if not plan_info:
+            return web.json_response({"error": "Noto'g'ri plan"}, status=400)
+
+        ins = await db.from_("transactions").insert({
+            "telegram_id": tg_id,
+            "provider": "payme",
+            "amount": plan_info["amount"],
+            "currency": "UZS",
+            "period_days": plan_info["days"],
+            "status": "pending",
+        }).execute()
+        tx_id = ins.data[0]["id"]
+
+        amount_tiyin = plan_info["amount"] * 100
+        callback = f"https://t.me/{BOT_USERNAME}"
+        raw = f"m={PAYME_MERCHANT_ID};ac.tx_id={tx_id};a={amount_tiyin};c={callback};l=uz"
+        encoded = base64.b64encode(raw.encode()).decode()
+        url = f"https://checkout.paycom.uz/{encoded}"
+
+        return web.json_response({"invoice_link": url, "tx_id": tx_id})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def barcode_lookup_endpoint(request: web.Request):
     barcode = request.match_info.get("barcode", "").strip()
     if not barcode or not barcode.isdigit():
@@ -698,6 +1259,11 @@ async def start_web():
     app.router.add_post("/api/analyze-food", analyze_food_endpoint)
     app.router.add_post("/api/analyze-label", analyze_label_endpoint)
     app.router.add_post("/api/create-invoice", create_invoice_endpoint)
+    app.router.add_post("/api/click/create-invoice", click_create_invoice_endpoint)
+    app.router.add_post("/click/prepare", click_prepare_endpoint)
+    app.router.add_post("/click/complete", click_complete_endpoint)
+    app.router.add_post("/api/payme/create-invoice", payme_create_invoice_endpoint)
+    app.router.add_post("/payme", payme_endpoint)
     app.router.add_get("/api/barcode-lookup/{barcode}", barcode_lookup_endpoint)
     runner = web.AppRunner(app)
     await runner.setup()
