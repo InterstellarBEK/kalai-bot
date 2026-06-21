@@ -14,6 +14,7 @@ from aiohttp import web
 import aiohttp
 
 from gemini_food import analyze_food_image, analyze_nutrition_label
+from p2p_handlers import setup_p2p
 
 load_dotenv()
 
@@ -52,6 +53,11 @@ CLICK_SERVICE_ID = os.getenv("CLICK_SERVICE_ID", "")
 CLICK_SECRET_KEY = os.getenv("CLICK_SECRET_KEY", "")
 CLICK_MERCHANT_USER_ID = os.getenv("CLICK_MERCHANT_USER_ID", "")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "kalai_test_bot")
+
+# ============ P2P / Lifetime ENV ============
+ADMIN_TELEGRAM_IDS = [int(x) for x in os.getenv("ADMIN_TELEGRAM_IDS", "").split(",") if x.strip()]
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0")) or None
+SMS_WEBHOOK_TOKEN = os.getenv("SMS_WEBHOOK_TOKEN", "")
 
 # Payme — narx UZS'da, lekin Payme tiyin yuboradi (1 UZS = 100 tiyin)
 PAYME_PLANS = {
@@ -1265,6 +1271,7 @@ async def start_web():
     app.router.add_post("/api/payme/create-invoice", payme_create_invoice_endpoint)
     app.router.add_post("/payme", payme_endpoint)
     app.router.add_get("/api/barcode-lookup/{barcode}", barcode_lookup_endpoint)
+    setup_p2p(dp, bot, db, app, ADMIN_TELEGRAM_IDS, ADMIN_CHAT_ID, SMS_WEBHOOK_TOKEN)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv("PORT", 10000))
