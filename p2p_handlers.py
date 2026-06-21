@@ -32,6 +32,11 @@ SMS_AMOUNT_PATTERNS = [
 SMS_CARD_PATTERN = re.compile(r'\*+(\d{4})')
 
 
+async def _rpc(name: str, params: dict = None):
+    """postgrest yangi versiya uchun wrapper — params=None bo'lsa {} jo'natadi"""
+    return await _db.rpc(name, params or {}).execute()
+
+
 def parse_bank_sms(text: str) -> dict:
     amount = None
     for pat in SMS_AMOUNT_PATTERNS:
@@ -79,12 +84,12 @@ async def bank_sms_endpoint(request: web.Request):
             pass
         return web.json_response({'status': 'ignored', 'reason': 'no_amount'})
 
-    res = await _db.rpc('auto_verify_by_bank_sms', {
+    res = await _rpc('auto_verify_by_bank_sms', {
         'p_raw_text': raw_text,
         'p_amount': parsed['amount'],
         'p_card_last4': parsed['last4'],
         'p_raw_hash': raw_hash,
-    }).execute()
+    })
     result = res.data or {}
 
     if result.get('status') == 'matched':
@@ -125,14 +130,18 @@ async def p2p_create_endpoint(request: web.Request):
         plan_info = P2P_PLANS.get(plan)
         if not plan_info:
             return web.json_response({'error': 'invalid_plan'}, status=400)
-        res = await _db.rpc('create_p2p_payment', {
+        res = await _rpc('create_p2p_payment', {
             'p_telegram_id': tg_id,
             'p_plan': plan,
             'p_base_amount': plan_info['amount'],
             'p_period_days': plan_info['days'],
-        }).execute()
-        return web.json_response(res.data)
+        })
+        result = res.data or {}
+        if isinstance(result, dict) and result.get('error'):
+            return web.json_response(result, status=400)
+        return web.json_response(result)
     except Exception as e:
+        print(f"[P2P create] ERROR: {type(e).__name__}: {e}")
         return web.json_response({'error': str(e)}, status=500)
 
 
@@ -153,12 +162,12 @@ async def handle_p2p_receipt_photo(message: Message):
     file_id = message.photo[-1].file_id
     photo_hash = hashlib.sha256(file_id.encode()).hexdigest()
 
-    rpc_res = await _db.rpc('submit_p2p_receipt', {
+    rpc_res = await _rpc('submit_p2p_receipt', {
         'p_payment_id': payment['id'],
         'p_telegram_id': tg_id,
         'p_receipt_file_id': file_id,
         'p_receipt_hash': photo_hash,
-    }).execute()
+    })
     result = rpc_res.data or {}
 
     if result.get('error'):
@@ -198,10 +207,10 @@ async def admin_approve_callback(callback: CallbackQuery):
         await callback.answer("Ruxsat yo'q", show_alert=True)
         return
     payment_id = int(callback.data.split(':')[1])
-    res = await _db.rpc('verify_p2p_payment', {
+    res = await _rpc('verify_p2p_payment', {
         'p_payment_id': payment_id,
         'p_admin_id': callback.from_user.id,
-    }).execute()
+    })
     result = res.data or {}
     if result.get('error'):
         await callback.answer(f"Xato: {result['error']}", show_alert=True)
@@ -232,11 +241,11 @@ async def admin_reject_callback(callback: CallbackQuery):
         await callback.answer("Ruxsat yo'q", show_alert=True)
         return
     payment_id = int(callback.data.split(':')[1])
-    res = await _db.rpc('reject_p2p_payment', {
+    res = await _rpc('reject_p2p_payment', {
         'p_payment_id': payment_id,
         'p_admin_id': callback.from_user.id,
         'p_reason': 'Admin rad etdi',
-    }).execute()
+    })
     result = res.data or {}
     if result.get('error'):
         await callback.answer(f"Xato: {result['error']}", show_alert=True)
@@ -262,6 +271,11 @@ async def admin_reject_callback(callback: CallbackQuery):
 # ============ Lifetime commands ============
 async def grant_lifetime_command(message: Message):
     if message.from_user.id not in _admin_ids:
+        await message.answer(
+            f"⛔ Admin emas.\nSening ID: <code>{message.from_user.id}</code>\n"
+            f"Admin ro'yxati: <code>{sorted(_admin_ids)}</code>",
+            parse_mode='HTML'
+        )
         return
     parts = message.text.split()
     if len(parts) < 2:
@@ -273,16 +287,33 @@ async def grant_lifetime_command(message: Message):
         await message.answer("telegram_id raqam bo'lishi kerak")
         return
     reason = ' '.join(parts[2:]) if len(parts) > 2 else None
-    res = await _db.rpc('grant_lifetime_premium', {
-        'p_telegram_id': target_id,
-        'p_granted_by': message.from_user.id,
-        'p_reason': reason,
-    }).execute()
-    result = res.data or {}
-    if result.get('error'):
-        await message.answer(f"❌ {result['error']}")
+    try:
+        res = await _rpc('grant_lifetime_premium', {
+            'p_telegram_id': target_id,
+            'p_granted_by': message.from_user.id,
+            'p_reason': reason,
+        })
+        raw = res.data
+        if isinstance(raw, list):
+            result = raw[0] if raw else {}
+        elif isinstance(raw, dict):
+            result = raw
+        else:
+            result = {}
+        if isinstance(result, dict) and result.get('error'):
+            await message.answer(f"❌ DB xato: <code>{result.get('error')}</code>\nMessage: {result.get('message','')}", parse_mode='HTML')
+            return
+        await message.answer(
+            f"✅ <code>{target_id}</code> ga umrbod Premium berildi.\n"
+            f"Natija: <code>{result}</code>",
+            parse_mode='HTML'
+        )
+    except Exception as e:
+        await message.answer(
+            f"❌ Exception:\n<code>{type(e).__name__}: {str(e)[:500]}</code>",
+            parse_mode='HTML'
+        )
         return
-    await message.answer(f"✅ <code>{target_id}</code> ga umrbod Premium berildi.", parse_mode='HTML')
     try:
         await _bot.send_message(
             target_id,
@@ -306,10 +337,10 @@ async def revoke_lifetime_command(message: Message):
     except ValueError:
         await message.answer("telegram_id raqam bo'lishi kerak")
         return
-    res = await _db.rpc('revoke_lifetime_premium', {
+    res = await _rpc('revoke_lifetime_premium', {
         'p_telegram_id': target_id,
         'p_revoked_by': message.from_user.id,
-    }).execute()
+    })
     result = res.data or {}
     if result.get('error'):
         await message.answer(f"❌ {result['error']}")
@@ -321,7 +352,7 @@ async def revoke_lifetime_command(message: Message):
 async def expire_loop():
     while True:
         try:
-            res = await _db.rpc('expire_old_p2p_payments').execute()
+            res = await _rpc('expire_old_p2p_payments', {})
             if res.data:
                 for row in res.data:
                     try:
