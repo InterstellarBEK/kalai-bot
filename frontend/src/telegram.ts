@@ -23,15 +23,70 @@ export function getStartParam(): string | null {
     return tg?.initDataUnsafe?.start_param ?? null
 }
 
-export function openInvoice(link: string): Promise<'paid' | 'cancelled' | 'failed' | 'pending'> {
+export function getTelegramVersion(): string {
+    return tg?.version ?? '6.0'
+}
+
+export function isVersionAtLeast(target: string): boolean {
+    if (!tg) return false
+    if (typeof tg.isVersionAtLeast === 'function') {
+        try { return tg.isVersionAtLeast(target) } catch { /* fall through */ }
+    }
+    // Manual fallback comparison
+    const a = String(tg.version ?? '6.0').split('.').map(Number)
+    const b = target.split('.').map(Number)
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const x = a[i] ?? 0
+        const y = b[i] ?? 0
+        if (x > y) return true
+        if (x < y) return false
+    }
+    return true
+}
+
+export type InvoiceStatus = 'paid' | 'cancelled' | 'failed' | 'pending' | 'unsupported'
+
+/**
+ * Open Telegram Stars / XTR invoice.
+ * Returns 'unsupported' if WebApp version < 6.1 — caller should show update message.
+ */
+export function openInvoice(link: string): Promise<InvoiceStatus> {
     return new Promise((resolve) => {
-        if (!tg?.openInvoice) {
+        // No Telegram context at all (browser dev)
+        if (!tg) {
             window.open(link, '_blank')
             resolve('pending')
             return
         }
-        tg.openInvoice(link, (status: string) => {
-            resolve(status as 'paid' | 'cancelled' | 'failed' | 'pending')
-        })
+
+        // openInvoice requires Bot API 6.1+
+        if (!isVersionAtLeast('6.1') || typeof tg.openInvoice !== 'function') {
+            resolve('unsupported')
+            return
+        }
+
+        try {
+            tg.openInvoice(link, (status: string) => {
+                resolve((status as InvoiceStatus) ?? 'failed')
+            })
+        } catch {
+            resolve('unsupported')
+        }
+    })
+}
+
+/**
+ * Show a Telegram-native alert (with fallback to browser alert).
+ */
+export function showAlert(message: string): Promise<void> {
+    return new Promise((resolve) => {
+        if (tg?.showAlert && isVersionAtLeast('6.2')) {
+            try {
+                tg.showAlert(message, () => resolve())
+                return
+            } catch { /* fall through */ }
+        }
+        try { window.alert(message) } catch { }
+        resolve()
     })
 }

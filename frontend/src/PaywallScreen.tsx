@@ -4,6 +4,7 @@ import Bekjon from './components/Bekjon'
 import { supabase } from './supabase'
 import { getTelegramId, openInvoice } from './telegram'
 import { useTranslation } from './i18n'
+import P2PPaymentModal from './P2PPaymentModal'
 
 const FONT = '"Plus Jakarta Sans", system-ui, sans-serif'
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 }
@@ -41,6 +42,7 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
     const [trialUsed, setTrialUsed] = useState<boolean | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState<string | null>(null)
+    const [showP2P, setShowP2P] = useState(false)
 
     const PLANS: PlanData[] = [
         { id: 'weekly', title: t('paywall_plan_weekly'), stars: 50, uzs: 5000, uzsOld: 7000, days: 7, perDay: t('paywall_per_day_w') },
@@ -307,17 +309,17 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                             {t('paywall_premium')}
                         </div>
                         {COMPARE.map((row) => (
-                            <>
-                                <div key={`f-${row.feature}`} className="text-[12px] font-semibold text-stone-700 dark:text-slate-300">
+                            <div key={row.feature} className="contents">
+                                <div className="text-[12px] font-semibold text-stone-700 dark:text-slate-300">
                                     {row.feature}
                                 </div>
-                                <div key={`r-${row.feature}`} className="text-center text-[12px] font-bold text-stone-400 dark:text-slate-500">
+                                <div className="text-center text-[12px] font-bold text-stone-400 dark:text-slate-500">
                                     {row.free}
                                 </div>
-                                <div key={`p-${row.feature}`} className="text-center text-[12px] font-extrabold" style={{ color: '#5B6AD0' }}>
+                                <div className="text-center text-[12px] font-extrabold" style={{ color: '#5B6AD0' }}>
                                     {row.premium}
                                 </div>
-                            </>
+                            </div>
                         ))}
                     </div>
                 </motion.div>
@@ -460,76 +462,107 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                         <div className="flex-1 h-px bg-stone-200 dark:bg-slate-700/60" />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2.5">
-                        {/* Click */}
-                        <div
-                            className="relative rounded-2xl p-3.5 overflow-hidden bg-white dark:bg-[#1E252E] cursor-not-allowed"
+                    <div className="grid grid-cols-1 gap-2.5">
+                        {/* P2P Card */}
+                        <motion.button
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => setShowP2P(true)}
+                            className="relative rounded-2xl p-4 overflow-hidden bg-white dark:bg-[#1E252E] text-left"
                             style={{
-                                border: '1.5px solid #E4E7F0',
-                                boxShadow: '0 4px 12px -6px rgba(91, 106, 208, 0.08)',
+                                border: '1.5px solid #5B6AD0',
+                                boxShadow: '0 6px 16px -6px rgba(91, 106, 208, 0.25)',
                             }}
                         >
-                            <div className="absolute inset-0 bg-white/60 dark:bg-[#1E252E]/70 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-1.5">
-                                <div className="text-base">🔒</div>
+                            <div className="flex items-center gap-3">
                                 <div
-                                    className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
-                                    style={{ background: 'linear-gradient(135deg, #EF9F27, #FFC56F)' }}
+                                    className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-lg"
+                                    style={{ background: 'linear-gradient(135deg, #5B6AD0, #7A8AE8)' }}
                                 >
-                                    Tez orada
+                                    💳
                                 </div>
-                            </div>
-                            <div className="flex items-center gap-2 mb-1.5">
-                                <div
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-extrabold text-[11px]"
-                                    style={{ background: 'linear-gradient(135deg, #00AEEF, #0086C9)' }}
-                                >
-                                    C
+                                <div className="flex-1">
+                                    <div className="text-sm font-extrabold text-stone-900 dark:text-slate-100">
+                                        Karta orqali to'lash
+                                    </div>
+                                    <div className="text-[11px] font-semibold text-stone-500 dark:text-slate-400">
+                                        Uzcard · Humo · {selectedPlan.uzs.toLocaleString('ru')} UZS
+                                    </div>
                                 </div>
-                                <span className="text-sm font-extrabold text-stone-900 dark:text-slate-100">
-                                    Click
-                                </span>
+                                <div className="text-stone-400 dark:text-slate-500 text-lg font-bold">›</div>
                             </div>
-                            <div className="text-[10px] font-semibold text-stone-500 dark:text-slate-400 leading-tight">
-                                Karta yoki Click hisob
-                            </div>
-                        </div>
+                        </motion.button>
 
-                        {/* Payme */}
-                        <div
-                            className="relative rounded-2xl p-3.5 overflow-hidden bg-white dark:bg-[#1E252E] cursor-not-allowed"
-                            style={{
-                                border: '1.5px solid #E4E7F0',
-                                boxShadow: '0 4px 12px -6px rgba(91, 106, 208, 0.08)',
-                            }}
-                        >
-                            <div className="absolute inset-0 bg-white/60 dark:bg-[#1E252E]/70 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-1.5">
-                                <div className="text-base">🔒</div>
-                                <div
-                                    className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
-                                    style={{ background: 'linear-gradient(135deg, #EF9F27, #FFC56F)' }}
-                                >
-                                    Tez orada
+                        {/* Click/Payme (Coming soon) */}
+                        <div className="grid grid-cols-2 gap-2.5">
+                            <div
+                                className="relative rounded-2xl p-3.5 overflow-hidden bg-white dark:bg-[#1E252E] cursor-not-allowed"
+                                style={{
+                                    border: '1.5px solid #E4E7F0',
+                                    boxShadow: '0 4px 12px -6px rgba(91, 106, 208, 0.08)',
+                                }}
+                            >
+                                <div className="absolute inset-0 bg-white/60 dark:bg-[#1E252E]/70 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-1.5">
+                                    <div className="text-base">🔒</div>
+                                    <div
+                                        className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
+                                        style={{ background: 'linear-gradient(135deg, #EF9F27, #FFC56F)' }}
+                                    >
+                                        Tez orada
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 mb-1.5">
+                                    <div
+                                        className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-extrabold text-[11px]"
+                                        style={{ background: 'linear-gradient(135deg, #00AEEF, #0086C9)' }}
+                                    >
+                                        C
+                                    </div>
+                                    <span className="text-sm font-extrabold text-stone-900 dark:text-slate-100">
+                                        Click
+                                    </span>
+                                </div>
+                                <div className="text-[10px] font-semibold text-stone-500 dark:text-slate-400 leading-tight">
+                                    Karta yoki Click hisob
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 mb-1.5">
-                                <div
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-extrabold text-[11px]"
-                                    style={{ background: 'linear-gradient(135deg, #33CCCC, #1FA8A8)' }}
-                                >
-                                    P
+
+                            {/* Payme */}
+                            <div
+                                className="relative rounded-2xl p-3.5 overflow-hidden bg-white dark:bg-[#1E252E] cursor-not-allowed"
+                                style={{
+                                    border: '1.5px solid #E4E7F0',
+                                    boxShadow: '0 4px 12px -6px rgba(91, 106, 208, 0.08)',
+                                }}
+                            >
+                                <div className="absolute inset-0 bg-white/60 dark:bg-[#1E252E]/70 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-1.5">
+                                    <div className="text-base">🔒</div>
+                                    <div
+                                        className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
+                                        style={{ background: 'linear-gradient(135deg, #EF9F27, #FFC56F)' }}
+                                    >
+                                        Tez orada
+                                    </div>
                                 </div>
-                                <span className="text-sm font-extrabold text-stone-900 dark:text-slate-100">
-                                    Payme
-                                </span>
-                            </div>
-                            <div className="text-[10px] font-semibold text-stone-500 dark:text-slate-400 leading-tight">
-                                Humo, Uzcard, Visa
+                                <div className="flex items-center gap-2 mb-1.5">
+                                    <div
+                                        className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-extrabold text-[11px]"
+                                        style={{ background: 'linear-gradient(135deg, #33CCCC, #1FA8A8)' }}
+                                    >
+                                        P
+                                    </div>
+                                    <span className="text-sm font-extrabold text-stone-900 dark:text-slate-100">
+                                        Payme
+                                    </span>
+                                </div>
+                                <div className="text-[10px] font-semibold text-stone-500 dark:text-slate-400 leading-tight">
+                                    Humo, Uzcard, Visa
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <p className="text-[10px] text-center text-stone-400 dark:text-slate-500 mt-2.5 font-semibold">
-                        UZS to'lov tez orada — hozircha Telegram Stars orqali to'lang
+                        Karta orqali — manual, 5 daqiqada avtomatik faollashadi
                     </p>
                 </motion.div>
 
@@ -604,6 +637,9 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                     </p>
                 </div>
             </motion.div>
+            {showP2P && (
+                <P2PPaymentModal plan={selected} onClose={() => setShowP2P(false)} />
+            )}
         </motion.div>
     )
 }
