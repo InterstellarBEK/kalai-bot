@@ -34,7 +34,7 @@ SMS_CARD_PATTERN = re.compile(r'\*+(\d{4})')
 
 async def _rpc(name: str, params: dict = None):
     """postgrest yangi versiya uchun wrapper — params=None bo'lsa {} jo'natadi"""
-    return await _db.rpc(name, params or {}).execute()
+    return await _db.rpc(name, params=params or {}).execute()
 
 
 def parse_bank_sms(text: str) -> dict:
