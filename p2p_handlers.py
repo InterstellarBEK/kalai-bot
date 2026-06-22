@@ -5,11 +5,11 @@ import os
 import re
 import hashlib
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from aiohttp import web
 from aiogram import Dispatcher, Bot, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, BufferedInputFile
 from aiogram.filters import Command
 
 _db = None
@@ -144,16 +144,105 @@ async def p2p_create_endpoint(request: web.Request):
         return web.json_response({'error': str(e)}, status=500)
 
 
-# ============ User screenshot fallback ============
-# QAYTARADI: True — chek qabul qilindi (Gemini scan o'tkazib yuboriladi)
-#            False — pending payment yo'q (Gemini scan davom etadi)
+# ============ P2P upload receipt (frontend → backend) ============
+async def p2p_upload_receipt_endpoint(request: web.Request):
+    """Frontend Mini App'dan chek rasmini yuklaydi."""
+    try:
+        reader = await request.multipart()
+        tg_id = None
+        payment_id = None
+        photo_bytes = None
+        filename = "receipt.jpg"
+
+        async for field in reader:
+            if field.name == 'telegram_id':
+                tg_id = int(await field.text())
+            elif field.name == 'payment_id':
+                payment_id = int(await field.text())
+            elif field.name == 'image':
+                filename = field.filename or "receipt.jpg"
+                photo_bytes = await field.read(decode=False)
+
+        if not tg_id or not payment_id or not photo_bytes:
+            return web.json_response({'error': 'missing_fields'}, status=400)
+
+        # Payment topish va tekshirish
+        now_iso = datetime.now(timezone.utc).isoformat()
+        res = await _db.from_('p2p_payments').select('*') \
+            .eq('id', payment_id).eq('telegram_id', tg_id) \
+            .eq('status', 'pending').gt('expires_at', now_iso) \
+            .limit(1).execute()
+
+        if not res.data:
+            return web.json_response({'error': 'payment_not_found_or_expired'}, status=404)
+
+        payment = res.data[0]
+        photo_hash = hashlib.sha256(photo_bytes).hexdigest()
+
+        # Admin'ga rasm yuborish — file_id ni shu yerdan olamiz
+        admin_msg = None
+        if _admin_chat_id:
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text='✅ Tasdiqlash', callback_data=f'p2p_ok:{payment["id"]}'),
+                InlineKeyboardButton(text='❌ Rad etish', callback_data=f'p2p_no:{payment["id"]}'),
+            ]])
+            caption = (
+                f"💳 <b>Yangi to'lov (Mini App)</b>\n\n"
+                f"ID: #{payment['id']}\n"
+                f"User: <code>{tg_id}</code>\n"
+                f"Plan: {payment['plan']}\n"
+                f"Summa: <b>{payment['total_amount']:,} UZS</b>"
+            )
+            try:
+                admin_msg = await _bot.send_photo(
+                    _admin_chat_id,
+                    photo=BufferedInputFile(photo_bytes, filename=filename),
+                    caption=caption,
+                    reply_markup=kb,
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                print(f"[P2P upload] admin notify failed: {e}", flush=True)
+
+        # file_id ni admin xabaridan olamiz (yo'q bo'lsa, hash bo'yicha saqlanadi)
+        file_id = admin_msg.photo[-1].file_id if admin_msg and admin_msg.photo else f"webupload_{photo_hash[:16]}"
+
+        rpc_res = await _rpc('submit_p2p_receipt', {
+            'p_payment_id': payment['id'],
+            'p_telegram_id': tg_id,
+            'p_receipt_file_id': file_id,
+            'p_receipt_hash': photo_hash,
+        })
+        result = rpc_res.data or {}
+
+        if result.get('error'):
+            return web.json_response(result, status=400)
+
+        # User'ga DM yuborish
+        try:
+            await _bot.send_message(
+                tg_id,
+                "✅ <b>Chek qabul qilindi!</b>\n\n"
+                "Admin tekshirib chiqadi. Odatda 5-30 daqiqada tasdiqlanadi.",
+                parse_mode='HTML'
+            )
+        except Exception:
+            pass
+
+        return web.json_response({'status': 'ok', 'payment_id': payment['id']})
+
+    except Exception as e:
+        print(f"[P2P upload] ERROR: {type(e).__name__}: {e}", flush=True)
+        return web.json_response({'error': str(e)}, status=500)
+
+
+# ============ User screenshot fallback (DM orqali) ============
 async def handle_p2p_receipt_photo(message: Message) -> bool:
     print(f"[P2P RECEIPT] called for tg_id={message.from_user.id} has_photo={bool(message.photo)}", flush=True)
     if not message.photo:
         return False
     tg_id = message.from_user.id
 
-    # DEBUG: pending paymentlar ro'yxati
     try:
         debug_res = await _db.from_('p2p_payments').select('id,status,expires_at,created_at') \
             .eq('telegram_id', tg_id).eq('status', 'pending') \
@@ -162,8 +251,6 @@ async def handle_p2p_receipt_photo(message: Message) -> bool:
     except Exception as e:
         print(f"[P2P DEBUG] query error: {e}", flush=True)
 
-    # Asosiy query — timezone bilan
-    from datetime import timezone
     now_iso = datetime.now(timezone.utc).isoformat()
     res = await _db.from_('p2p_payments').select('*') \
         .eq('telegram_id', tg_id).eq('status', 'pending') \
@@ -398,8 +485,8 @@ def setup_p2p(dp: Dispatcher, bot: Bot, db, app: web.Application,
 
     app.router.add_post('/api/bank-sms', bank_sms_endpoint)
     app.router.add_post('/api/p2p/create', p2p_create_endpoint)
+    app.router.add_post('/api/p2p/upload-receipt', p2p_upload_receipt_endpoint)
 
-    # NOTE: handle_p2p_receipt_photo bot.py'dagi handle_photo ichidan chaqiriladi
     dp.callback_query.register(admin_approve_callback, F.data.startswith('p2p_ok:'))
     dp.callback_query.register(admin_reject_callback, F.data.startswith('p2p_no:'))
     dp.message.register(grant_lifetime_command, Command('grant'))
