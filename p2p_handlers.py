@@ -208,11 +208,13 @@ async def p2p_upload_receipt_endpoint(request: web.Request):
         file_id = admin_msg.photo[-1].file_id if admin_msg and admin_msg.photo else f"webupload_{photo_hash[:16]}"
 
         rpc_res = await _rpc('submit_p2p_receipt', {
-            'p_payment_id': payment['id'],
-            'p_telegram_id': tg_id,
-            'p_receipt_file_id': file_id,
-            'p_receipt_hash': photo_hash,
-        })
+    'p_payment_id': payment['id'],
+    'p_telegram_id': tg_id,
+    'p_receipt_file_id': file_id,
+    'p_receipt_hash': photo_hash,
+    'p_sender_card_last4': None,
+    'p_sender_name': None,
+})
         result = rpc_res.data or {}
 
         if result.get('error'):
