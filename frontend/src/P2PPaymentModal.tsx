@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getTelegramId } from './telegram'
 import { useTranslation } from './i18n'
@@ -36,6 +36,10 @@ export default function P2PPaymentModal({ plan, onClose }: Props) {
     const [data, setData] = useState<PaymentData | null>(null)
     const [copied, setCopied] = useState<'card' | 'amount' | null>(null)
     const [secondsLeft, setSecondsLeft] = useState<number>(0)
+    const [uploading, setUploading] = useState(false)
+    const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle')
+    const [uploadMessage, setUploadMessage] = useState<string>('')
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     useEffect(() => {
         (async () => {
@@ -79,7 +83,49 @@ export default function P2PPaymentModal({ plan, onClose }: Props) {
         } catch { }
     }
 
+    async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0]
+        if (!file || !data) return
+
+        if (file.size > 10 * 1024 * 1024) {
+            setUploadStatus('error')
+            setUploadMessage(t('p2p_upload_too_large') || 'Rasm hajmi 10MB dan oshmasligi kerak')
+            return
+        }
+
+        setUploading(true)
+        setUploadStatus('idle')
+        setUploadMessage('')
+
+        try {
+            const formData = new FormData()
+            formData.append('telegram_id', String(getTelegramId()))
+            formData.append('payment_id', String(data.payment_id))
+            formData.append('image', file)
+
+            const res = await fetch(`${BOT_URL}/api/p2p/upload-receipt`, {
+                method: 'POST',
+                body: formData,
+            })
+            const json = await res.json()
+
+            if (!res.ok || json.error) {
+                throw new Error(json.message || json.error || 'Upload failed')
+            }
+
+            setUploadStatus('success')
+            setUploadMessage(t('p2p_upload_success') || 'Chek qabul qilindi! Admin tekshiradi.')
+        } catch (err: any) {
+            setUploadStatus('error')
+            setUploadMessage(err.message || 'Yuklashda xato')
+        } finally {
+            setUploading(false)
+            if (fileInputRef.current) fileInputRef.current.value = ''
+        }
+    }
+
     const amountStr = data ? data.total_amount.toLocaleString('ru') : ''
+    const expired = secondsLeft <= 0 && data !== null
 
     return (
         <AnimatePresence>
@@ -197,6 +243,59 @@ export default function P2PPaymentModal({ plan, onClose }: Props) {
                                     <li>{t('p2p_step2')}</li>
                                     <li>{t('p2p_step3')}</li>
                                 </ol>
+                            </div>
+
+                            {/* Upload Receipt */}
+                            <div
+                                className="bg-white dark:bg-[#1E252E] rounded-2xl p-4 mb-3"
+                                style={{ border: '1.5px solid #E4E7F0' }}
+                            >
+                                <div className="text-xs font-extrabold text-stone-700 dark:text-slate-200 mb-2">
+                                    📸 {t('p2p_upload_title') || "To'lov chekini yuklang"}
+                                </div>
+                                <div className="text-[11px] text-stone-500 dark:text-slate-400 mb-3 font-semibold">
+                                    {t('p2p_upload_hint') || "To'lov qilganingizdan keyin chek skrinshotini yuklang. Admin 5-30 daqiqada tasdiqlaydi."}
+                                </div>
+
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleFileSelect}
+                                    className="hidden"
+                                    disabled={uploading || expired || uploadStatus === 'success'}
+                                />
+
+                                <motion.button
+                                    whileTap={{ scale: 0.97 }}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={uploading || expired || uploadStatus === 'success'}
+                                    className="w-full py-3 rounded-xl text-sm font-extrabold text-white disabled:opacity-50"
+                                    style={{
+                                        background: uploadStatus === 'success'
+                                            ? 'linear-gradient(135deg,#10B981,#34D399)'
+                                            : 'linear-gradient(135deg,#5B6AD0,#7A8AE8)'
+                                    }}
+                                >
+                                    {uploading
+                                        ? (t('p2p_upload_loading') || 'Yuklanmoqda...')
+                                        : uploadStatus === 'success'
+                                            ? (t('p2p_upload_done') || '✓ Yuklandi')
+                                            : expired
+                                                ? (t('p2p_expired') || 'Vaqt tugadi')
+                                                : (t('p2p_upload_button') || 'Chek rasmini tanlash')}
+                                </motion.button>
+
+                                {uploadMessage && (
+                                    <div
+                                        className={`mt-3 text-xs font-semibold text-center p-2 rounded-xl ${uploadStatus === 'success'
+                                            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                                            : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                                            }`}
+                                    >
+                                        {uploadMessage}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="text-[10px] text-center text-stone-400 dark:text-slate-500 font-semibold">
