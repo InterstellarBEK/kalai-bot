@@ -313,12 +313,16 @@ async def add_cmd(message: Message, command: CommandObject):
 
 @dp.message(F.photo)
 async def handle_photo(message: Message):
-    # 1) Avval P2P chek bo'lishi mumkin — tekshirib ko'ramiz
+    print(f"[PHOTO] received from tg_id={message.from_user.id}", flush=True)
+
+    # 1) Avval P2P chek bo'lishi mumkin
     try:
-        if await handle_p2p_receipt_photo(message):
-            return  # chek qabul qilindi, Gemini scan'ga o'tmaymiz
+        is_p2p = await handle_p2p_receipt_photo(message)
+        print(f"[PHOTO] p2p result={is_p2p}", flush=True)
+        if is_p2p:
+            return
     except Exception as e:
-        print(f"[P2P photo check] {e}")
+        print(f"[P2P photo check] {type(e).__name__}: {e}", flush=True)
 
     # 2) P2P emas — Gemini food scan
     status = await message.answer("Rasmni tahlil qilyapman...")

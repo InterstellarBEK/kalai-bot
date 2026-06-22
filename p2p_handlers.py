@@ -104,7 +104,7 @@ async def bank_sms_endpoint(request: web.Request):
                 parse_mode='HTML'
             )
         except Exception as e:
-            print(f"[P2P] notify user failed: {e}")
+            print(f"[P2P] notify user failed: {e}", flush=True)
         if _admin_chat_id:
             try:
                 await _bot.send_message(
@@ -140,7 +140,7 @@ async def p2p_create_endpoint(request: web.Request):
             return web.json_response(result, status=400)
         return web.json_response(result)
     except Exception as e:
-        print(f"[P2P create] ERROR: {type(e).__name__}: {e}")
+        print(f"[P2P create] ERROR: {type(e).__name__}: {e}", flush=True)
         return web.json_response({'error': str(e)}, status=500)
 
 
@@ -148,20 +148,21 @@ async def p2p_create_endpoint(request: web.Request):
 # QAYTARADI: True — chek qabul qilindi (Gemini scan o'tkazib yuboriladi)
 #            False — pending payment yo'q (Gemini scan davom etadi)
 async def handle_p2p_receipt_photo(message: Message) -> bool:
+    print(f"[P2P RECEIPT] called for tg_id={message.from_user.id} has_photo={bool(message.photo)}", flush=True)
     if not message.photo:
         return False
     tg_id = message.from_user.id
 
-    # DEBUG: pending paymentlar ro'yxati (timezone'siz, status faqat)
+    # DEBUG: pending paymentlar ro'yxati
     try:
         debug_res = await _db.from_('p2p_payments').select('id,status,expires_at,created_at') \
             .eq('telegram_id', tg_id).eq('status', 'pending') \
             .order('created_at', desc=True).limit(3).execute()
-        print(f"[P2P DEBUG] tg_id={tg_id} pending rows: {debug_res.data}")
+        print(f"[P2P DEBUG] tg_id={tg_id} pending rows: {debug_res.data}", flush=True)
     except Exception as e:
-        print(f"[P2P DEBUG] query error: {e}")
+        print(f"[P2P DEBUG] query error: {e}", flush=True)
 
-    # Asosiy query — timezone bilan to'g'rilangan
+    # Asosiy query — timezone bilan
     from datetime import timezone
     now_iso = datetime.now(timezone.utc).isoformat()
     res = await _db.from_('p2p_payments').select('*') \
@@ -169,7 +170,7 @@ async def handle_p2p_receipt_photo(message: Message) -> bool:
         .gt('expires_at', now_iso) \
         .order('created_at', desc=True).limit(1).execute()
 
-    print(f"[P2P DEBUG] now={now_iso} matched={len(res.data) if res.data else 0}")
+    print(f"[P2P DEBUG] now={now_iso} matched={len(res.data) if res.data else 0}", flush=True)
 
     if not res.data:
         return False
@@ -214,7 +215,7 @@ async def handle_p2p_receipt_photo(message: Message) -> bool:
             await _bot.send_photo(_admin_chat_id, photo=file_id, caption=caption,
                                   reply_markup=kb, parse_mode='HTML')
         except Exception as e:
-            print(f"[P2P] admin notify failed: {e}")
+            print(f"[P2P] admin notify failed: {e}", flush=True)
 
     return True
 
@@ -381,7 +382,7 @@ async def expire_loop():
                     except Exception:
                         pass
         except Exception as e:
-            print(f"[P2P expire] {e}")
+            print(f"[P2P expire] {e}", flush=True)
         await asyncio.sleep(300)
 
 
@@ -399,11 +400,10 @@ def setup_p2p(dp: Dispatcher, bot: Bot, db, app: web.Application,
     app.router.add_post('/api/p2p/create', p2p_create_endpoint)
 
     # NOTE: handle_p2p_receipt_photo bot.py'dagi handle_photo ichidan chaqiriladi
-    # (Gemini scan bilan konflikt bo'lmasin uchun)
     dp.callback_query.register(admin_approve_callback, F.data.startswith('p2p_ok:'))
     dp.callback_query.register(admin_reject_callback, F.data.startswith('p2p_no:'))
     dp.message.register(grant_lifetime_command, Command('grant'))
     dp.message.register(revoke_lifetime_command, Command('revoke'))
 
     asyncio.create_task(expire_loop())
-    print("[P2P] handlers registered")
+    print("[P2P] handlers registered", flush=True)
