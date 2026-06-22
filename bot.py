@@ -14,7 +14,7 @@ from aiohttp import web
 import aiohttp
 
 from gemini_food import analyze_food_image, analyze_nutrition_label
-from p2p_handlers import setup_p2p
+from p2p_handlers import setup_p2p, handle_p2p_receipt_photo
 
 load_dotenv()
 
@@ -313,6 +313,14 @@ async def add_cmd(message: Message, command: CommandObject):
 
 @dp.message(F.photo)
 async def handle_photo(message: Message):
+    # 1) Avval P2P chek bo'lishi mumkin — tekshirib ko'ramiz
+    try:
+        if await handle_p2p_receipt_photo(message):
+            return  # chek qabul qilindi, Gemini scan'ga o'tmaymiz
+    except Exception as e:
+        print(f"[P2P photo check] {e}")
+
+    # 2) P2P emas — Gemini food scan
     status = await message.answer("Rasmni tahlil qilyapman...")
 
     photo = message.photo[-1]
