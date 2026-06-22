@@ -416,6 +416,14 @@ const translations: Record<Lang, Record<string, string>> = {
         p2p_step3: 'Agar avtomatik bo\'lmasa — chek screenshot\'ini shu botga yuboring',
         p2p_footer: 'To\'lov #{id} · Suffix {suffix} anti-fraud uchun',
         paywall_stars_unsupported: 'Telegram versiyangiz Stars\'ni qo\'llab-quvvatlamaydi. Telegram ilovasini yangilang yoki karta orqali to\'lang.',
+        p2p_upload_title: 'To\'lov chekini yuklang',
+        p2p_upload_hint: 'To\'lov qilganingizdan keyin chek skrinshotini yuklang. Admin 5-30 daqiqada tasdiqlaydi.',
+        p2p_upload_button: 'Chek rasmini tanlash',
+        p2p_upload_loading: 'Yuklanmoqda...',
+        p2p_upload_done: '✓ Yuklandi',
+        p2p_upload_success: 'Chek qabul qilindi! Admin tekshiradi.',
+        p2p_upload_too_large: 'Rasm hajmi 10MB dan oshmasligi kerak',
+        p2p_expired: 'Vaqt tugadi',
     },
 
     'uz-Cyrl': {
@@ -795,6 +803,14 @@ const translations: Record<Lang, Record<string, string>> = {
         p2p_step3: 'Агар автоматик бўлмаса — чек скриншотини шу ботга юборинг',
         p2p_footer: 'Тўлов #{id} · Суффикс {suffix} анти-фрод учун',
         paywall_stars_unsupported: 'Телеграм версиянгиз Stars\'ни қўллаб-қувватламайди. Илованг яниланг ёки карта орқали тўланг.',
+        p2p_upload_title: 'Тўлов чекини юкланг',
+        p2p_upload_hint: 'Тўлов қилганингиздан кейин чек скриншотини юкланг. Админ 5-30 дақиқада тасдиқлайди.',
+        p2p_upload_button: 'Чек расмини танлаш',
+        p2p_upload_loading: 'Юкланмоқда...',
+        p2p_upload_done: '✓ Юкланди',
+        p2p_upload_success: 'Чек қабул қилинди! Админ текширади.',
+        p2p_upload_too_large: 'Расм ҳажми 10MB дан ошмаслиги керак',
+        p2p_expired: 'Вақт тугади',
     },
 
     'ru': {
@@ -1174,6 +1190,14 @@ const translations: Record<Lang, Record<string, string>> = {
         p2p_step3: 'Если не активировалось автоматически — отправьте скрин чека боту',
         p2p_footer: 'Платёж #{id} · Суффикс {suffix} для защиты от мошенничества',
         paywall_stars_unsupported: 'Ваша версия Telegram не поддерживает Stars. Обновите приложение или оплатите картой.',
+        p2p_upload_title: 'Загрузите чек оплаты',
+        p2p_upload_hint: 'После оплаты загрузите скриншот чека. Админ подтвердит за 5-30 минут.',
+        p2p_upload_button: 'Выбрать фото чека',
+        p2p_upload_loading: 'Загрузка...',
+        p2p_upload_done: '✓ Загружено',
+        p2p_upload_success: 'Чек принят! Админ проверит.',
+        p2p_upload_too_large: 'Размер фото не должен превышать 10MB',
+        p2p_expired: 'Время истекло',
     },
 
     'en': {
@@ -1553,5 +1577,13 @@ const translations: Record<Lang, Record<string, string>> = {
         p2p_step3: 'If not automatic — send the receipt screenshot to this bot',
         p2p_footer: 'Payment #{id} · Suffix {suffix} for anti-fraud',
         paywall_stars_unsupported: 'Your Telegram version does not support Stars. Update the app or pay by card.',
+        p2p_upload_title: 'Upload payment receipt',
+        p2p_upload_hint: 'After payment, upload your receipt screenshot. Admin will confirm in 5-30 min.',
+        p2p_upload_button: 'Choose receipt photo',
+        p2p_upload_loading: 'Uploading...',
+        p2p_upload_done: '✓ Uploaded',
+        p2p_upload_success: 'Receipt received! Admin will review.',
+        p2p_upload_too_large: 'Image size must not exceed 10MB',
+        p2p_expired: 'Time expired',
     },
 }
