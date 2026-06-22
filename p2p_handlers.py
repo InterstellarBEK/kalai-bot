@@ -316,9 +316,10 @@ async def admin_approve_callback(callback: CallbackQuery):
         return
     payment_id = int(callback.data.split(':')[1])
     res = await _rpc('verify_p2p_payment', {
-        'p_payment_id': payment_id,
-        'p_admin_id': callback.from_user.id,
-    })
+    'p_payment_id': payment_id,
+    'p_admin_id': callback.from_user.id,
+    'p_admin_note': None,
+})
     result = res.data or {}
     if result.get('error'):
         await callback.answer(f"Xato: {result['error']}", show_alert=True)
