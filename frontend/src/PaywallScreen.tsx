@@ -249,9 +249,19 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                 .eq('telegram_id', getTelegramId())
                 .maybeSingle()
             setTrialUsed(!!data?.trial_used)
-            oldPremiumUntilRef.current = data?.premium_until
-                ? new Date(data.premium_until).getTime()
-                : 0
+
+            const ts = data?.premium_until ? new Date(data.premium_until).getTime() : 0
+
+            // Mini App reload bo'lganda — agar premium allaqachon aktiv,
+            // darhol success modal ko'rsatamiz
+            if (ts > Date.now()) {
+                const days = Math.ceil((ts - Date.now()) / 86_400_000)
+                setActivatedDays(Math.max(1, days))
+                setShowActivated(true)
+                return
+            }
+
+            oldPremiumUntilRef.current = ts
         })()
     }, [])
 
