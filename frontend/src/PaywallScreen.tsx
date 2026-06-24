@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
+import { useState, useEffect, useRef } from 'react'
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion'
 import Bekjon from './components/Bekjon'
 import { supabase } from './supabase'
 import { getTelegramId, openInvoice } from './telegram'
@@ -34,6 +34,175 @@ function AnimatedCount({ to }: { to: number }) {
     return <motion.span>{rounded}</motion.span>
 }
 
+// ──────────────────────────────────────────────────────────────
+// SUCCESS MODAL — Premium faollashtirilganda chiqadi
+// ──────────────────────────────────────────────────────────────
+function ActivationSuccessModal({
+    daysLeft,
+    onClose,
+}: {
+    daysLeft: number
+    onClose: () => void
+}) {
+    const { t } = useTranslation()
+
+    // Confetti emojis
+    const confetti = ['🎉', '✨', '⭐', '👑', '🌟', '💫', '🎊', '⚡']
+
+    return (
+        <AnimatePresence>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-md flex items-center justify-center p-5"
+                style={{ fontFamily: FONT }}
+            >
+                {/* Confetti rain */}
+                {[...Array(20)].map((_, i) => (
+                    <motion.div
+                        key={i}
+                        className="absolute text-2xl pointer-events-none"
+                        initial={{
+                            top: '-10%',
+                            left: `${Math.random() * 100}%`,
+                            opacity: 0,
+                            rotate: 0,
+                        }}
+                        animate={{
+                            top: '110%',
+                            opacity: [0, 1, 1, 0],
+                            rotate: Math.random() > 0.5 ? 360 : -360,
+                        }}
+                        transition={{
+                            duration: 2.5 + Math.random() * 1.5,
+                            delay: Math.random() * 1.2,
+                            repeat: Infinity,
+                            ease: 'linear',
+                        }}
+                    >
+                        {confetti[i % confetti.length]}
+                    </motion.div>
+                ))}
+
+                <motion.div
+                    initial={{ scale: 0.5, opacity: 0, y: 40 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.8, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 240, damping: 22 }}
+                    className="relative w-full max-w-sm bg-white dark:bg-[#1E252E] rounded-[2rem] p-7 text-center"
+                    style={{
+                        boxShadow: '0 30px 80px -20px rgba(91,106,208,0.6)',
+                        border: '2px solid rgba(91,106,208,0.2)',
+                    }}
+                >
+                    {/* Glow background */}
+                    <div
+                        className="absolute inset-0 rounded-[2rem] pointer-events-none opacity-50"
+                        style={{
+                            background:
+                                'radial-gradient(circle at 50% 0%, rgba(91,106,208,0.25) 0%, transparent 60%)',
+                        }}
+                    />
+
+                    <div className="relative">
+                        <motion.div
+                            initial={{ scale: 0, rotate: -180 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            transition={{ type: 'spring', stiffness: 200, damping: 16, delay: 0.2 }}
+                            className="flex justify-center mb-3"
+                        >
+                            <div className="relative">
+                                <motion.div
+                                    className="absolute inset-0 rounded-full blur-2xl"
+                                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0.8, 0.5] }}
+                                    transition={{ duration: 2, repeat: Infinity }}
+                                    style={{
+                                        background:
+                                            'radial-gradient(circle, rgba(91,106,208,0.6) 0%, transparent 70%)',
+                                    }}
+                                />
+                                <Bekjon mood="celebration" size={120} />
+                            </div>
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ y: 10, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.4 }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full mb-3"
+                            style={{
+                                background: 'linear-gradient(135deg, #EF9F27, #FFC56F)',
+                            }}
+                        >
+                            <span className="text-xs">👑</span>
+                            <span className="text-white text-[11px] font-extrabold uppercase tracking-wider">
+                                PREMIUM FAOL
+                            </span>
+                        </motion.div>
+
+                        <motion.h2
+                            initial={{ y: 10, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.5 }}
+                            className="text-2xl font-extrabold text-stone-900 dark:text-slate-100 mb-2"
+                        >
+                            {t('activation_title') || 'Tabriklaymiz!'}
+                        </motion.h2>
+
+                        <motion.p
+                            initial={{ y: 10, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.6 }}
+                            className="text-sm font-semibold text-stone-500 dark:text-slate-400 mb-5 leading-relaxed"
+                        >
+                            {t('activation_subtitle') ||
+                                "Premium obunangiz muvaffaqiyatli faollashtirildi. Endi barcha imkoniyatlar siz uchun ochiq!"}
+                        </motion.p>
+
+                        {/* Days card */}
+                        <motion.div
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ delay: 0.7, type: 'spring', stiffness: 220 }}
+                            className="rounded-2xl p-4 mb-5"
+                            style={{
+                                background: 'linear-gradient(135deg, #5B6AD0 0%, #7A8AE8 100%)',
+                                boxShadow: '0 12px 28px -10px rgba(91,106,208,0.5)',
+                            }}
+                        >
+                            <div className="text-white/80 text-[10px] font-extrabold uppercase tracking-wider mb-1">
+                                {t('activation_days_label') || 'Amal qilish muddati'}
+                            </div>
+                            <div className="text-white text-3xl font-extrabold">
+                                {daysLeft} {t('activation_days_unit') || 'kun'}
+                            </div>
+                        </motion.div>
+
+                        <motion.button
+                            initial={{ y: 10, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.8 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={onClose}
+                            className="w-full text-white font-extrabold py-3.5 rounded-2xl"
+                            style={{
+                                background: 'linear-gradient(135deg, #1D9E75 0%, #2BC18C 100%)',
+                                boxShadow: '0 10px 24px -8px rgba(29,158,117,0.5)',
+                            }}
+                        >
+                            {t('activation_cta') || 'Davom etish'}
+                        </motion.button>
+                    </div>
+                </motion.div>
+            </motion.div>
+        </AnimatePresence>
+    )
+}
+
+// ──────────────────────────────────────────────────────────────
+// MAIN PAYWALL
+// ──────────────────────────────────────────────────────────────
 export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
     const { t } = useTranslation()
     const [selected, setSelected] = useState<Plan>('monthly')
@@ -43,6 +212,14 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState<string | null>(null)
     const [showP2P, setShowP2P] = useState(false)
+
+    // ───── Activation polling state ─────
+    const [polling, setPolling] = useState(false)
+    const [showActivated, setShowActivated] = useState(false)
+    const [activatedDays, setActivatedDays] = useState(0)
+    const oldPremiumUntilRef = useRef<number>(0) // ms timestamp
+    const pollAttemptsRef = useRef(0)
+    const MAX_POLL_ATTEMPTS = 180 // 180 × 5s = 15 daqiqa
 
     const PLANS: PlanData[] = [
         { id: 'weekly', title: t('paywall_plan_weekly'), stars: 50, uzs: 5000, uzsOld: 7000, days: 7, perDay: t('paywall_per_day_w') },
@@ -63,16 +240,64 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
 
     const selectedPlan = PLANS.find((p) => p.id === selected)!
 
+    // Initial load — trial_used + premium_until (baseline)
     useEffect(() => {
         (async () => {
             const { data } = await supabase
                 .from('users')
-                .select('trial_used')
+                .select('trial_used, premium_until')
                 .eq('telegram_id', getTelegramId())
                 .maybeSingle()
             setTrialUsed(!!data?.trial_used)
+            oldPremiumUntilRef.current = data?.premium_until
+                ? new Date(data.premium_until).getTime()
+                : 0
         })()
     }, [])
+
+    // ───── Polling effect ─────
+    useEffect(() => {
+        if (!polling) return
+
+        pollAttemptsRef.current = 0
+        const interval = setInterval(async () => {
+            pollAttemptsRef.current += 1
+
+            if (pollAttemptsRef.current > MAX_POLL_ATTEMPTS) {
+                setPolling(false)
+                return
+            }
+
+            const { data } = await supabase
+                .from('users')
+                .select('premium_until')
+                .eq('telegram_id', getTelegramId())
+                .maybeSingle()
+
+            if (!data?.premium_until) return
+
+            const newTs = new Date(data.premium_until).getTime()
+            if (newTs > oldPremiumUntilRef.current) {
+                // ✅ Premium faollashtirildi!
+                const daysLeft = Math.ceil((newTs - Date.now()) / 86_400_000)
+                setActivatedDays(Math.max(1, daysLeft))
+                setShowActivated(true)
+                setPolling(false)
+                oldPremiumUntilRef.current = newTs
+            }
+        }, 5000)
+
+        return () => clearInterval(interval)
+    }, [polling])
+
+    function startPolling() {
+        setPolling(true)
+    }
+
+    function handleActivatedClose() {
+        setShowActivated(false)
+        onClose?.()
+    }
 
     async function handleTrial() {
         setTrialLoading(true)
@@ -85,7 +310,8 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
             if (data?.success) {
                 setSuccess(t('paywall_trial_success'))
                 setTrialUsed(true)
-                setTimeout(() => onClose?.(), 2000)
+                // Trial uchun ham polling boshlash (DB darhol yangilanadi, lekin UX uchun bir xil oqim)
+                startPolling()
             } else {
                 setError(t('paywall_trial_used'))
                 setTrialUsed(true)
@@ -113,7 +339,8 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
             const status = await openInvoice(data.invoice_link)
             if (status === 'paid') {
                 setError(null)
-                onClose?.()
+                // Stars to'lov tugadi — bot activate qilayotgan, polling boshlash
+                startPolling()
             } else if (status === 'failed') {
                 setError(t('paywall_payment_failed'))
             }
@@ -254,6 +481,33 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
             </div>
 
             <div className="max-w-md mx-auto px-4 mt-4">
+                {/* --- POLLING INDICATOR --- */}
+                {polling && !showActivated && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="rounded-2xl p-3 mb-4 flex items-center gap-3"
+                        style={{
+                            background: 'linear-gradient(135deg, rgba(91,106,208,0.12), rgba(122,138,232,0.08))',
+                            border: '1.5px solid rgba(91,106,208,0.3)',
+                        }}
+                    >
+                        <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+                            className="w-5 h-5 border-2 border-[#5B6AD0] border-t-transparent rounded-full flex-shrink-0"
+                        />
+                        <div className="flex-1">
+                            <div className="text-sm font-extrabold text-[#5B6AD0]">
+                                {t('activation_waiting_title') || "Faollashtirilmoqda..."}
+                            </div>
+                            <div className="text-[11px] font-semibold text-stone-500 dark:text-slate-400">
+                                {t('activation_waiting_sub') || "Premium tasdiqlanmoqda, biroz kuting"}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
                 {/* --- TRIAL CTA --- */}
                 {trialUsed === false && (
                     <motion.div
@@ -295,60 +549,32 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ ...SPRING, delay: 0.3 }}
                     className="bg-white dark:bg-[#1E252E] rounded-2xl p-4 mb-4"
-                    style={{ boxShadow: '0 8px 24px -10px rgba(91,106,208,0.15)' }}
+                    style={{ boxShadow: '0 8px 24px -12px rgba(91,106,208,0.15)' }}
                 >
                     <div className="text-xs font-bold text-stone-500 dark:text-slate-400 uppercase tracking-wider mb-3 text-center">
                         {t('paywall_compare_title')}
                     </div>
-                    <div className="grid grid-cols-[1.3fr_0.7fr_0.7fr] gap-x-2 gap-y-2 items-center">
+                    <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-2 text-xs">
                         <div></div>
-                        <div className="text-center text-[11px] font-extrabold text-stone-500 dark:text-slate-400 uppercase">
-                            {t('paywall_free')}
+                        <div className="text-center font-extrabold text-stone-400 dark:text-slate-500 uppercase tracking-wider text-[10px] pb-1">
+                            {t('paywall_compare_free')}
                         </div>
-                        <div className="text-center text-[11px] font-extrabold uppercase" style={{ color: '#5B6AD0' }}>
-                            {t('paywall_premium')}
+                        <div className="text-center font-extrabold text-[10px] uppercase tracking-wider pb-1" style={{ color: '#5B6AD0' }}>
+                            {t('paywall_compare_premium')}
                         </div>
-                        {COMPARE.map((row) => (
-                            <div key={row.feature} className="contents">
-                                <div className="text-[12px] font-semibold text-stone-700 dark:text-slate-300">
+                        {COMPARE.map((row, i) => (
+                            <div key={i} className="contents">
+                                <div className="text-stone-700 dark:text-slate-300 font-semibold py-1.5 border-t border-stone-100 dark:border-slate-700/50">
                                     {row.feature}
                                 </div>
-                                <div className="text-center text-[12px] font-bold text-stone-400 dark:text-slate-500">
+                                <div className="text-center text-stone-500 dark:text-slate-400 font-bold py-1.5 border-t border-stone-100 dark:border-slate-700/50">
                                     {row.free}
                                 </div>
-                                <div className="text-center text-[12px] font-extrabold" style={{ color: '#5B6AD0' }}>
+                                <div className="text-center font-extrabold py-1.5 border-t border-stone-100 dark:border-slate-700/50" style={{ color: '#5B6AD0' }}>
                                     {row.premium}
                                 </div>
                             </div>
                         ))}
-                    </div>
-                </motion.div>
-
-                {/* --- TESTIMONIAL --- */}
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ ...SPRING, delay: 0.35 }}
-                    className="bg-white dark:bg-[#1E252E] rounded-2xl p-4 mb-4"
-                    style={{ boxShadow: '0 8px 24px -10px rgba(91,106,208,0.15)' }}
-                >
-                    <div className="flex items-start gap-3">
-                        <div
-                            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-extrabold text-sm flex-shrink-0"
-                            style={{ background: 'linear-gradient(135deg, #EF9F27, #FFC56F)' }}
-                        >
-                            MA
-                        </div>
-                        <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                                <span className="text-sm font-extrabold text-stone-900 dark:text-slate-100">Mansur A.</span>
-                                <span className="text-[11px] font-semibold text-stone-400">·</span>
-                                <span className="text-[11px] text-yellow-500">★★★★★</span>
-                            </div>
-                            <p className="text-[13px] font-medium text-stone-700 dark:text-slate-300 leading-snug">
-                                {t('paywall_testimonial_text')}
-                            </p>
-                        </div>
                     </div>
                 </motion.div>
 
@@ -447,7 +673,7 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                     </div>
                 </motion.div>
 
-                {/* --- ALTERNATIVE PAYMENT METHODS (COMING SOON) --- */}
+                {/* --- ALTERNATIVE PAYMENT METHODS --- */}
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -526,7 +752,6 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                                 </div>
                             </div>
 
-                            {/* Payme */}
                             <div
                                 className="relative rounded-2xl p-3.5 overflow-hidden bg-white dark:bg-[#1E252E] cursor-not-allowed"
                                 style={{
@@ -637,8 +862,23 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                     </p>
                 </div>
             </motion.div>
+
             {showP2P && (
-                <P2PPaymentModal plan={selected} onClose={() => setShowP2P(false)} />
+                <P2PPaymentModal
+                    plan={selected}
+                    onClose={() => setShowP2P(false)}
+                    onReceiptUploaded={() => {
+                        setShowP2P(false)
+                        startPolling()
+                    }}
+                />
+            )}
+
+            {showActivated && (
+                <ActivationSuccessModal
+                    daysLeft={activatedDays}
+                    onClose={handleActivatedClose}
+                />
             )}
         </motion.div>
     )

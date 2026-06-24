@@ -12,6 +12,7 @@ type Plan = 'weekly' | 'monthly' | 'yearly'
 interface Props {
     plan: Plan
     onClose: () => void
+    onReceiptUploaded?: () => void
 }
 
 interface PaymentData {
@@ -29,7 +30,7 @@ function fmt(template: string, vars: Record<string, string | number>): string {
     return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`))
 }
 
-export default function P2PPaymentModal({ plan, onClose }: Props) {
+export default function P2PPaymentModal({ plan, onClose, onReceiptUploaded }: Props) {
     const { t } = useTranslation()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -115,6 +116,12 @@ export default function P2PPaymentModal({ plan, onClose }: Props) {
 
             setUploadStatus('success')
             setUploadMessage(t('p2p_upload_success') || 'Chek qabul qilindi! Admin tekshiradi.')
+
+            // ✅ Parent'ga signal — polling boshlash
+            // 1.5s kechiktirib chaqiramiz, user "Yuklandi" xabarini ko'rsin
+            setTimeout(() => {
+                onReceiptUploaded?.()
+            }, 1500)
         } catch (err: any) {
             setUploadStatus('error')
             setUploadMessage(err.message || 'Yuklashda xato')
