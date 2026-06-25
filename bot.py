@@ -16,10 +16,12 @@ import aiohttp
 from gemini_food import analyze_food_image, analyze_nutrition_label
 from p2p_handlers import setup_p2p, handle_p2p_receipt_photo
 from admin_handlers import setup_admin
+from trial_notifications import trial_notifications_loop
 load_dotenv()
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://kalai-bot.vercel.app")
 
 db = AsyncPostgrestClient(
     base_url=f"{os.getenv('SUPABASE_URL')}/rest/v1",
@@ -1307,6 +1309,7 @@ async def main():
     await start_web()
     asyncio.create_task(daily_reminder_loop())
     asyncio.create_task(weekly_report_loop())
+    asyncio.create_task(trial_notifications_loop(bot, db, WEBAPP_URL))
     await dp.start_polling(bot)
 
 
