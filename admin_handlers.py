@@ -66,8 +66,10 @@ def setup_admin(dp: Dispatcher, db: AsyncPostgrestClient, admin_ids: list[int]):
                 bot: Bot = message.bot
                 await bot.send_message(
                     target_id,
-                    "ℹ️ Premium obunangiz administrator tomonidan bekor qilindi.\n\n"
-                    "Savollar bo'lsa @InterstellarBEK ga yozing.",
+                    "ℹ️ <b>Premium obunangiz bekor qilindi</b>\n\n"
+                    "Administrator tomonidan obunangiz to'xtatildi.\n\n"
+                    "Savol yoki shikoyatlar bo'lsa @Khalik0vv ga yozing.",
+                    parse_mode="HTML",
                 )
             except Exception as e:
                 await message.answer(f"⚠️ DM yuborilmadi: {e}")
@@ -126,7 +128,8 @@ def setup_admin(dp: Dispatcher, db: AsyncPostgrestClient, admin_ids: list[int]):
                     target_id,
                     "🎉 <b>Tabriklaymiz!</b>\n\n"
                     "Sizga umrbod Lokma Premium taqdim etildi! 👑\n"
-                    "Endi barcha imkoniyatlar siz uchun ochiq.",
+                    "Endi barcha imkoniyatlar siz uchun ochiq.\n\n"
+                    "Savol yoki yordam kerak bo'lsa @Khalik0vv ga yozing.",
                     parse_mode="HTML",
                 )
             except Exception as e:
