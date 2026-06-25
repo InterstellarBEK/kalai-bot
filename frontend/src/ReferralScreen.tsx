@@ -17,6 +17,7 @@ interface Stats {
 }
 
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 }
+const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'kalai_test_bot'
 
 export default function ReferralScreen({ onClose }: ReferralScreenProps) {
     const { t } = useTranslation()
@@ -28,7 +29,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
 
     const tgId = getTelegramId()
     const firstName = getTelegramFirstName() || t('ref_friends')
-    const refLink = `https://t.me/kalai_test_bot?start=ref_${tgId}`
+    const refLink = `https://t.me/${BOT_USERNAME}?start=ref_${tgId}`
     const shareText = `${firstName} ${t('ref_share_text')}`
 
     useEffect(() => {
@@ -405,7 +406,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                     >
                         <span className="text-lg">🔗</span>
                         <div className="flex-1 text-xs font-bold truncate text-stone-700 dark:text-slate-300">
-                            t.me/kalai_test_bot?start=ref_{tgId}
+                            t.me/{BOT_USERNAME}?start=ref_{tgId}
                         </div>
                         <AnimatePresence mode="wait">
                             <motion.div
