@@ -7,6 +7,9 @@ const FONT = '"Plus Jakarta Sans", system-ui, sans-serif'
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 }
 const BOT_URL = import.meta.env.VITE_BOT_URL || 'https://kalai-bot.onrender.com'
 
+const MAX_DIM = 1280
+const JPEG_QUALITY = 0.85
+
 type Plan = 'weekly' | 'monthly' | 'yearly'
 
 interface Props {
@@ -28,6 +31,59 @@ interface PaymentData {
 
 function fmt(template: string, vars: Record<string, string | number>): string {
     return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`))
+}
+
+/**
+ * Rasmni Canvas API orqali resize qiladi.
+ * - max 1280×1280 (aspect ratio saqlanadi)
+ * - EXIF orientation avtomatik (createImageBitmap)
+ * - JPEG 0.85 quality
+ * - Fallback: xato bo'lsa original file qaytadi
+ */
+async function resizeImage(file: File): Promise<File> {
+    try {
+        // EXIF orientation'ni avtomatik qo'llaydi (modern browserlarda)
+        let bitmap: ImageBitmap
+        try {
+            bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' } as any)
+        } catch {
+            // Safari eski versiyalar uchun fallback
+            bitmap = await createImageBitmap(file)
+        }
+
+        const { width: srcW, height: srcH } = bitmap
+
+        // Agar allaqachon kichik bo'lsa, ham qayta encode qilamiz (Telegram dimension chegarasi uchun)
+        const scale = Math.min(1, MAX_DIM / Math.max(srcW, srcH))
+        const dstW = Math.max(1, Math.round(srcW * scale))
+        const dstH = Math.max(1, Math.round(srcH * scale))
+
+        const canvas = document.createElement('canvas')
+        canvas.width = dstW
+        canvas.height = dstH
+        const ctx = canvas.getContext('2d')
+        if (!ctx) throw new Error('canvas_ctx_failed')
+
+        // Sifatli resize uchun
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        ctx.drawImage(bitmap, 0, 0, dstW, dstH)
+
+        bitmap.close?.()
+
+        const blob: Blob = await new Promise((resolve, reject) => {
+            canvas.toBlob(
+                (b) => (b ? resolve(b) : reject(new Error('canvas_toblob_failed'))),
+                'image/jpeg',
+                JPEG_QUALITY
+            )
+        })
+
+        return new File([blob], 'receipt.jpg', { type: 'image/jpeg', lastModified: Date.now() })
+    } catch (err) {
+        console.warn('[resizeImage] fallback to original:', err)
+        return file
+    }
 }
 
 export default function P2PPaymentModal({ plan, onClose, onReceiptUploaded }: Props) {
@@ -88,6 +144,7 @@ export default function P2PPaymentModal({ plan, onClose, onReceiptUploaded }: Pr
         const file = e.target.files?.[0]
         if (!file || !data) return
 
+        // Original size tekshiruvi (10MB)
         if (file.size > 10 * 1024 * 1024) {
             setUploadStatus('error')
             setUploadMessage(t('p2p_upload_too_large') || 'Rasm hajmi 10MB dan oshmasligi kerak')
@@ -99,10 +156,19 @@ export default function P2PPaymentModal({ plan, onClose, onReceiptUploaded }: Pr
         setUploadMessage('')
 
         try {
+            // 1. Canvas orqali resize (max 1280×1280, JPEG 0.85)
+            const resized = await resizeImage(file)
+
+            // 2. Resize'dan keyin ham size tekshiruvi (xavfsizlik uchun)
+            if (resized.size > 10 * 1024 * 1024) {
+                throw new Error(t('p2p_upload_too_large') || 'Rasm hajmi 10MB dan oshmasligi kerak')
+            }
+
+            // 3. FormData yuborish
             const formData = new FormData()
             formData.append('telegram_id', String(getTelegramId()))
             formData.append('payment_id', String(data.payment_id))
-            formData.append('image', file)
+            formData.append('image', resized)
 
             const res = await fetch(`${BOT_URL}/api/p2p/upload-receipt`, {
                 method: 'POST',
