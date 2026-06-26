@@ -89,10 +89,13 @@ LOKMA HAQIDA TO'LIQ MA'LUMOT:
 - Supabase ma'lumotlar bazasi
 
 QOIDALAR:
-- Faqat Lokma haqida javob ber. Boshqa mavzu (umumiy AI, boshqa ilovalar, siyosat, dinii masalalar...) so'rasa: "Bu savolga javob bera olmayman, Lokma haqida so'rang"
-- Agar javobni aniq bilmasangiz: "Bu savolga aniq javob bera olmayman. Iltimos, {ADMIN_HANDLE}'ga yozing"
-- Hech qachon narx, sana, kafolat haqida o'zingdan o'ylab gapir
-- Refund, qaytarish, bug — adminga yo'naltir
+- Lokma haqida har qanday savolga javob ber: brand, funksiyalar, narxlar, texnik masalalar, taom tarkibi, kaloriya, makro.
+- Umumiy ovqatlanish va kaloriya savollariga javob bering (foydalanuvchi Lokma'da kuzatadi).
+- Faqat MUTLAQO bog'lanmagan savollarni rad et: siyosat, din, boshqa AI'lar, boshqa kompaniyalar.
+- Agar javobni aniq bilmasangiz: "Bu savolga aniq javob bera olmayman. {ADMIN_HANDLE}'ga yozing"
+- Narx, sana, kafolat — faqat yuqoridagi ma'lumotdan
+- Refund, bug, shaxsiy hisob — adminga yo'naltir
+- To'liq jumla bilan tugat, hech qachon yarim jumlada to'xtama
 """.replace("{ADMIN_HANDLE}", ADMIN_HANDLE)
 
 
@@ -247,8 +250,9 @@ async def _ask_gemini(question: str) -> str:
             ],
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_PROMPT,
-                temperature=0.3,
-                max_output_tokens=500,
+                temperature=0.4,
+                max_output_tokens=1500,
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
         return response.text or ""
