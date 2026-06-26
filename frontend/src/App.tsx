@@ -69,8 +69,9 @@ function App() {
       .eq('telegram_id', tgId)
       .maybeSingle()
 
-    // Yangi user → trial + referral (idempotent, faqat birinchi marta)
-    if (!data) {
+    // Trial hali ishlatilmagan bo'lsa → faollashtir + referral qo'lla
+    // (activate_trial idempotent: advisory_xact_lock + already_premium guard)
+    if (!data?.trial_used) {
       await supabase.rpc('activate_trial', { p_telegram_id: tgId })
 
       const startParam = getStartParam()
