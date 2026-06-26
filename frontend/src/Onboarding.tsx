@@ -9,11 +9,22 @@ interface Props { onComplete: () => void }
 
 const FONT = '"Plus Jakarta Sans", system-ui, sans-serif'
 
+// Yosh chegaralari
+const AGE_MIN = 13
+const AGE_MAX = 100
+const AGE_DEFAULT = 19
+
+// Vazn/bo'y chegaralari (validation uchun)
+const WEIGHT_MIN = 30
+const WEIGHT_MAX = 300
+const HEIGHT_MIN = 100
+const HEIGHT_MAX = 250
+
 export default function Onboarding({ onComplete }: Props) {
     const { t } = useTranslation()
     const [step, setStep] = useState(0)
     const [gender, setGender] = useState<'male' | 'female'>('male')
-    const [age, setAge] = useState('')
+    const [age, setAge] = useState<number>(AGE_DEFAULT)
     const [weight, setWeight] = useState('')
     const [height, setHeight] = useState('')
     const [activity, setActivity] = useState('1.375')
@@ -22,14 +33,24 @@ export default function Onboarding({ onComplete }: Props) {
 
     const firstName = getTelegramFirstName() || t('onb_default_name')
 
+    // Vazn/bo'y validation
+    const weightValid = (() => {
+        const n = parseFloat(weight)
+        return !isNaN(n) && n >= WEIGHT_MIN && n <= WEIGHT_MAX
+    })()
+    const heightValid = (() => {
+        const n = parseFloat(height)
+        return !isNaN(n) && n >= HEIGHT_MIN && n <= HEIGHT_MAX
+    })()
+
     const canNext =
         step === 0 ? true :
-            step === 1 ? !!age :
-                step === 2 ? !!weight && !!height :
+            step === 1 ? age >= AGE_MIN && age <= AGE_MAX :
+                step === 2 ? weightValid && heightValid :
                     true
 
     const finish = async () => {
-        const a = parseFloat(age)
+        const a = age
         const w = parseFloat(weight)
         const h = parseFloat(height)
 
@@ -126,7 +147,7 @@ export default function Onboarding({ onComplete }: Props) {
                                         </div>
                                     </Section>
                                     <Section label={t('section_age')}>
-                                        <Input value={age} onChange={setAge} placeholder="19" />
+                                        <AgeStepper value={age} onChange={setAge} min={AGE_MIN} max={AGE_MAX} />
                                     </Section>
                                 </div>
                             </div>
@@ -143,10 +164,24 @@ export default function Onboarding({ onComplete }: Props) {
                                 </p>
                                 <div className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-5" style={{ boxShadow: '0 8px 24px -10px rgba(91, 106, 208, 0.12)' }}>
                                     <Section label={t('section_weight')}>
-                                        <Input value={weight} onChange={setWeight} placeholder="70" />
+                                        <Input
+                                            value={weight}
+                                            onChange={setWeight}
+                                            placeholder="70"
+                                            min={WEIGHT_MIN}
+                                            max={WEIGHT_MAX}
+                                            suffix="kg"
+                                        />
                                     </Section>
                                     <Section label={t('section_height')}>
-                                        <Input value={height} onChange={setHeight} placeholder="175" />
+                                        <Input
+                                            value={height}
+                                            onChange={setHeight}
+                                            placeholder="175"
+                                            min={HEIGHT_MIN}
+                                            max={HEIGHT_MAX}
+                                            suffix="cm"
+                                        />
                                     </Section>
                                 </div>
                             </div>
@@ -165,24 +200,27 @@ export default function Onboarding({ onComplete }: Props) {
                                     <Section label={t('onb_goal_q')}>
                                         <div className="space-y-2">
                                             {[
-                                                { val: 'lose', label: t('goal_lose'), emoji: '📉' },
-                                                { val: 'maintain', label: t('onb_goal_maintain_long'), emoji: '⚖️' },
-                                                { val: 'gain', label: t('goal_gain'), emoji: '📈' },
-                                            ].map(opt => (
-                                                <motion.button
-                                                    key={opt.val}
-                                                    whileTap={{ scale: 0.97 }}
-                                                    onClick={() => setGoal(opt.val as any)}
-                                                    className="w-full py-3.5 px-4 rounded-2xl font-bold flex items-center gap-3 transition-colors"
-                                                    style={{
-                                                        background: goal === opt.val ? '#5B6AD0' : 'var(--color-input-bg)',
-                                                        color: goal === opt.val ? '#fff' : 'var(--color-input-text)',
-                                                    }}
-                                                >
-                                                    <span className="text-xl">{opt.emoji}</span>
-                                                    {opt.label}
-                                                </motion.button>
-                                            ))}
+                                                { val: 'lose' as const, label: t('goal_lose'), Icon: IconTrendingDown },
+                                                { val: 'maintain' as const, label: t('onb_goal_maintain_long'), Icon: IconEqual },
+                                                { val: 'gain' as const, label: t('goal_gain'), Icon: IconTrendingUp },
+                                            ].map(opt => {
+                                                const active = goal === opt.val
+                                                return (
+                                                    <motion.button
+                                                        key={opt.val}
+                                                        whileTap={{ scale: 0.97 }}
+                                                        onClick={() => setGoal(opt.val)}
+                                                        className="w-full py-3.5 px-4 rounded-2xl font-bold flex items-center gap-3 transition-colors"
+                                                        style={{
+                                                            background: active ? '#5B6AD0' : 'var(--color-input-bg)',
+                                                            color: active ? '#fff' : 'var(--color-input-text)',
+                                                        }}
+                                                    >
+                                                        <opt.Icon color={active ? '#fff' : '#5B6AD0'} />
+                                                        {opt.label}
+                                                    </motion.button>
+                                                )
+                                            })}
                                         </div>
                                     </Section>
                                     <Section label={t('onb_activity_label')}>
@@ -253,17 +291,143 @@ function PillButton({ active, onClick, children }: { active: boolean; onClick: (
     )
 }
 
-function Input({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+/* ─────────── Yangi Age Stepper (− 19 +) ─────────── */
+function AgeStepper({
+    value, onChange, min, max,
+}: { value: number; onChange: (n: number) => void; min: number; max: number }) {
+    const [editing, setEditing] = useState(false)
+    const [draft, setDraft] = useState(String(value))
+
+    const dec = () => onChange(Math.max(min, value - 1))
+    const inc = () => onChange(Math.min(max, value + 1))
+
+    const commit = () => {
+        const n = parseInt(draft, 10)
+        if (!isNaN(n)) onChange(Math.max(min, Math.min(max, n)))
+        setEditing(false)
+    }
+
     return (
-        <input
-            type="number"
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            placeholder={placeholder}
-            className="w-full rounded-2xl px-4 py-3.5 font-semibold text-sm focus:outline-none transition"
-            style={{ background: 'var(--color-input-bg)', color: 'var(--color-input-text)', border: '2px solid transparent' }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = '#5B6AD0')}
-            onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
-        />
+        <div
+            className="flex items-center justify-between rounded-2xl px-2 py-2"
+            style={{ background: 'var(--color-input-bg)' }}
+        >
+            <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={dec}
+                disabled={value <= min}
+                className="w-11 h-11 rounded-xl flex items-center justify-center font-extrabold text-2xl disabled:opacity-30"
+                style={{ background: '#5B6AD0', color: '#fff' }}
+                aria-label="minus"
+            >
+                −
+            </motion.button>
+
+            {editing ? (
+                <input
+                    type="number"
+                    autoFocus
+                    inputMode="numeric"
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    onBlur={commit}
+                    onKeyDown={e => { if (e.key === 'Enter') commit() }}
+                    className="flex-1 mx-2 text-center text-2xl font-extrabold bg-transparent outline-none"
+                    style={{ color: 'var(--color-input-text)' }}
+                />
+            ) : (
+                <button
+                    onClick={() => { setDraft(String(value)); setEditing(true) }}
+                    className="flex-1 mx-2 text-center text-2xl font-extrabold tabular-nums"
+                    style={{ color: 'var(--color-input-text)' }}
+                >
+                    {value}
+                </button>
+            )}
+
+            <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={inc}
+                disabled={value >= max}
+                className="w-11 h-11 rounded-xl flex items-center justify-center font-extrabold text-2xl disabled:opacity-30"
+                style={{ background: '#5B6AD0', color: '#fff' }}
+                aria-label="plus"
+            >
+                +
+            </motion.button>
+        </div>
+    )
+}
+
+function Input({
+    value, onChange, placeholder, min, max, suffix,
+}: {
+    value: string
+    onChange: (v: string) => void
+    placeholder: string
+    min?: number
+    max?: number
+    suffix?: string
+}) {
+    return (
+        <div className="relative">
+            <input
+                type="number"
+                inputMode="numeric"
+                value={value}
+                min={min}
+                max={max}
+                onChange={e => {
+                    // Bo'sh stringga ruxsat (kiritish jarayonida)
+                    if (e.target.value === '') { onChange(''); return }
+                    const n = parseFloat(e.target.value)
+                    if (isNaN(n)) return
+                    // Max chegara — clamp
+                    if (max !== undefined && n > max) { onChange(String(max)); return }
+                    onChange(e.target.value)
+                }}
+                placeholder={placeholder}
+                className="w-full rounded-2xl px-4 py-3.5 font-semibold text-sm focus:outline-none transition pr-12"
+                style={{ background: 'var(--color-input-bg)', color: 'var(--color-input-text)', border: '2px solid transparent' }}
+                onFocus={(e) => (e.currentTarget.style.borderColor = '#5B6AD0')}
+                onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
+            />
+            {suffix && (
+                <span
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold pointer-events-none"
+                    style={{ color: 'var(--color-input-text)', opacity: 0.5 }}
+                >
+                    {suffix}
+                </span>
+            )}
+        </div>
+    )
+}
+
+/* ─────────── SVG ikonlar (lucide-style) ─────────── */
+function IconTrendingDown({ color }: { color: string }) {
+    return (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 17 13.5 8.5 8.5 13.5 2 7" />
+            <polyline points="16 17 22 17 22 11" />
+        </svg>
+    )
+}
+
+function IconEqual({ color }: { color: string }) {
+    return (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="5" y1="9" x2="19" y2="9" />
+            <line x1="5" y1="15" x2="19" y2="15" />
+        </svg>
+    )
+}
+
+function IconTrendingUp({ color }: { color: string }) {
+    return (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+            <polyline points="16 7 22 7 22 13" />
+        </svg>
     )
 }

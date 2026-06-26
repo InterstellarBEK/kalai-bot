@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 
 export type Lang = 'uz-Latn' | 'uz-Cyrl' | 'ru' | 'en'
 
@@ -82,7 +82,7 @@ const translations: Record<Lang, Record<string, string>> = {
         activity_high: "Yuqori (6-7 marta/hafta)",
         goal_lose: 'Ozayish',
         goal_maintain: 'Saqlash',
-        goal_gain: "To'yish",
+        goal_gain: 'Vazn olish',
         btn_calculate: 'Hisoblash',
         btn_saving: 'Saqlanmoqda...',
         btn_save: 'Saqlash',
@@ -477,7 +477,7 @@ const translations: Record<Lang, Record<string, string>> = {
         activity_high: 'Юқори (6-7 марта/ҳафта)',
         goal_lose: 'Озайиш',
         goal_maintain: 'Сақлаш',
-        goal_gain: 'Тўйиш',
+        goal_gain: 'Вазн олиш',
         btn_calculate: 'Ҳисоблаш',
         btn_saving: 'Сақланмоқда...',
         btn_save: 'Сақлаш',
@@ -869,7 +869,7 @@ const translations: Record<Lang, Record<string, string>> = {
         activity_high: 'Высокая (6-7 раза/нед.)',
         goal_lose: 'Похудеть',
         goal_maintain: 'Удержать',
-        goal_gain: 'Набрать',
+        goal_gain: 'Набрать вес',
         btn_calculate: 'Рассчитать',
         btn_saving: 'Сохраняем...',
         btn_save: 'Сохранить',
