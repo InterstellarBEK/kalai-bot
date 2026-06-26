@@ -232,13 +232,16 @@ def _check_rate_limit(telegram_id: int, is_premium: bool) -> tuple[bool, int]:
 
 
 async def _ask_gemini(question: str) -> str:
-    """Gemini'ga savol yuborib javob ol. Timeout 15s."""
+    """Gemini'ga savol yuborib javob ol. Retry + fallback model."""
     if not _client:
-        return "AI hozircha sozlanmagan. Iltimos, {ADMIN_HANDLE}'ga yozing.".replace("{ADMIN_HANDLE}", ADMIN_HANDLE)
+        return f"AI hozircha sozlanmagan. Iltimos, {ADMIN_HANDLE}'ga yozing."
 
-    def _sync_call():
+    # Tartib: avval lite (tez+arzon), 503 bo'lsa asosiy flash'ga o'tish
+    models_to_try = [GEMINI_MODEL, "gemini-2.5-flash"]
+
+    def _sync_call(model_name: str):
         response = _client.models.generate_content(
-            model=GEMINI_MODEL,
+            model=model_name,
             contents=[
                 types.Content(role="user", parts=[types.Part(text=question)])
             ],
@@ -250,17 +253,41 @@ async def _ask_gemini(question: str) -> str:
         )
         return response.text or ""
 
-    try:
-        text = await asyncio.wait_for(asyncio.to_thread(_sync_call), timeout=15.0)
-        text = (text or "").strip()
-        if not text:
-            return f"Kechirasiz, javob ololmadim. {ADMIN_HANDLE}'ga yozing."
-        return text
-    except asyncio.TimeoutError:
-        return f"⏱ AI sekin javob beryapti. Qaytadan urinib ko'ring yoki {ADMIN_HANDLE}'ga yozing."
-    except Exception as e:
-        print(f"[support AI error] {e}", flush=True)
-        return f"⚠️ AI vaqtincha ishlamayapti. {ADMIN_HANDLE}'ga yozing."
+    last_error = None
+    for attempt, model_name in enumerate(models_to_try):
+        # Har model uchun 2 marta urinish (exponential backoff)
+        for retry in range(2):
+            try:
+                text = await asyncio.wait_for(
+                    asyncio.to_thread(_sync_call, model_name),
+                    timeout=15.0,
+                )
+                text = (text or "").strip()
+                if text:
+                    return text
+            except asyncio.TimeoutError:
+                last_error = "timeout"
+            except Exception as e:
+                err_str = str(e)
+                last_error = err_str
+                print(f"[support AI] {model_name} retry={retry} error: {err_str}", flush=True)
+                # 503/429/UNAVAILABLE → retry yoki keyingi modelga o'tish
+                if "503" in err_str or "429" in err_str or "UNAVAILABLE" in err_str:
+                    if retry == 0:
+                        await asyncio.sleep(1.5)  # qisqa kutish
+                        continue
+                    else:
+                        break  # keyingi modelga o'tish
+                else:
+                    # Boshqa xato — to'g'ridan adminga
+                    return f"⚠️ Texnik xato yuz berdi. {ADMIN_HANDLE}'ga yozing."
+
+    # Hammasi muvaffaqiyatsiz
+    print(f"[support AI] all models failed. last_error={last_error}", flush=True)
+    return (
+        "⏱ AI hozir band (Google serverlarida yuklama). "
+        f"Bir necha daqiqadan keyin qayta urining yoki {ADMIN_HANDLE}'ga yozing."
+    )
 
 
 # ─────────── Setup ───────────
