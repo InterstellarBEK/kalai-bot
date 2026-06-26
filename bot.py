@@ -16,6 +16,7 @@ import aiohttp
 from gemini_food import analyze_food_image, analyze_nutrition_label
 from p2p_handlers import setup_p2p, handle_p2p_receipt_photo
 from admin_handlers import setup_admin
+from support_handlers import setup_support
 from trial_notifications import trial_notifications_loop
 load_dotenv()
 
@@ -1306,6 +1307,7 @@ async def set_commands():
 async def main():
     await set_commands()
     setup_admin(dp, db, ADMIN_TELEGRAM_IDS)   # ← shu qator yangi
+    setup_support(dp)
     await start_web()
     asyncio.create_task(daily_reminder_loop())
     asyncio.create_task(weekly_report_loop())
