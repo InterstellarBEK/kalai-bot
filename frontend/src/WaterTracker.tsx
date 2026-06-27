@@ -3,6 +3,54 @@ import { motion } from 'framer-motion'
 import { getTodayWater, addWater, getWaterGoal, removeLastWater } from './water'
 import { useTranslation } from './i18n'
 
+// ── Iconly-style SVG icons ────────────────────────────────
+function WIcon({
+    name,
+    size = 18,
+    color = 'currentColor',
+    fill = 'none',
+    strokeWidth = 2,
+}: {
+    name: 'droplet' | 'undo'
+    size?: number
+    color?: string
+    fill?: string
+    strokeWidth?: number
+}) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    }
+    switch (name) {
+        case 'droplet':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M12 3.2c2.6 3.1 6.8 7.5 6.8 11.5a6.8 6.8 0 11-13.6 0c0-4 4.2-8.4 6.8-11.5z"
+                        fill={fill}
+                    />
+                    <path
+                        d="M9 13.5c-.4 1 .1 2.5 1.5 3"
+                        opacity="0.8"
+                    />
+                </svg>
+            )
+        case 'undo':
+            return (
+                <svg {...common}>
+                    <path d="M4 10h11a4.5 4.5 0 010 9H10" />
+                    <path d="M8 6L4 10l4 4" />
+                </svg>
+            )
+    }
+}
+
 export function WaterTracker() {
     const { t } = useTranslation()
     const [todayMl, setTodayMl] = useState(0)
@@ -41,10 +89,15 @@ export function WaterTracker() {
         >
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                    <span className="text-2xl">💧</span>
-                    <h3 className="font-semibold text-[15px] text-gray-900">{t('water_title')}</h3>
+                    <div
+                        className="w-9 h-9 rounded-xl flex items-center justify-center"
+                        style={{ background: 'rgba(59, 157, 245, 0.12)' }}
+                    >
+                        <WIcon name="droplet" size={20} color="#3B9DF5" fill="rgba(59, 157, 245, 0.25)" strokeWidth={2} />
+                    </div>
+                    <h3 className="font-semibold text-[15px] text-gray-900 dark:text-slate-100">{t('water_title')}</h3>
                 </div>
-                <span className="text-[13px] text-gray-500 font-medium">
+                <span className="text-[13px] text-gray-500 dark:text-slate-400 font-medium">
                     {todayMl} / {goalMl} ml
                 </span>
             </div>
@@ -65,7 +118,7 @@ export function WaterTracker() {
             </div>
 
             <div className="mb-4">
-                <div className="h-2 bg-[#DDE3F5] rounded-full overflow-hidden">
+                <div className="h-2 bg-[#DDE3F5] dark:bg-[#252D38] rounded-full overflow-hidden">
                     <motion.div
                         className="h-full bg-[#5B6AD0] rounded-full"
                         initial={false}
@@ -86,7 +139,7 @@ export function WaterTracker() {
                 <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleAdd(500)}
-                    className="flex-1 py-2.5 rounded-2xl bg-[#DDE3F5] text-[#5B6AD0] font-medium text-[14px]"
+                    className="flex-1 py-2.5 rounded-2xl bg-[#DDE3F5] dark:bg-[#252D38] text-[#5B6AD0] font-medium text-[14px]"
                 >
                     +500ml
                 </motion.button>
@@ -94,9 +147,9 @@ export function WaterTracker() {
                     whileTap={{ scale: 0.95 }}
                     onClick={handleUndo}
                     disabled={todayMl === 0}
-                    className="px-3 py-2.5 rounded-2xl bg-gray-100 text-gray-500 font-medium text-[14px] disabled:opacity-40"
+                    className="px-3 py-2.5 rounded-2xl bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-300 font-medium disabled:opacity-40 flex items-center justify-center"
                 >
-                    ↩
+                    <WIcon name="undo" size={16} strokeWidth={2.2} />
                 </motion.button>
             </div>
         </motion.div>
