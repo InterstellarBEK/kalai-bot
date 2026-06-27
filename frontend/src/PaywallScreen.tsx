@@ -24,6 +24,117 @@ interface PlanData {
     save?: string
 }
 
+// ──────────────────────────────────────────────────────────────
+// ICON HELPER — Iconly-style inline SVG
+// ──────────────────────────────────────────────────────────────
+type IconName = 'sparkle' | 'crown' | 'gift' | 'card' | 'lock' | 'star' | 'close' | 'bolt' | 'starBurst'
+
+function PIcon({
+    name,
+    size = 18,
+    color = 'currentColor',
+    fill = 'none',
+    strokeWidth = 2,
+}: {
+    name: IconName
+    size?: number
+    color?: string
+    fill?: string
+    strokeWidth?: number
+}) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    }
+
+    switch (name) {
+        case 'sparkle':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"
+                        fill={fill}
+                    />
+                    <path d="M19 16l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7L19 16z" fill={fill} />
+                </svg>
+            )
+        case 'crown':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M3 7l3.5 4L12 5l5.5 6L21 7v11a1 1 0 01-1 1H4a1 1 0 01-1-1V7z"
+                        fill={fill}
+                    />
+                    <circle cx="3" cy="7" r="1.1" fill={color} stroke="none" />
+                    <circle cx="12" cy="5" r="1.1" fill={color} stroke="none" />
+                    <circle cx="21" cy="7" r="1.1" fill={color} stroke="none" />
+                </svg>
+            )
+        case 'gift':
+            return (
+                <svg {...common}>
+                    <rect x="3.5" y="9" width="17" height="11" rx="1.5" fill={fill} />
+                    <path d="M3.5 13h17" />
+                    <path d="M12 9v11" />
+                    <path d="M12 9c-1.5-3.5-5.5-3-5.5-.5 0 1 1 1.5 2 1.5h3.5z" fill={fill} />
+                    <path d="M12 9c1.5-3.5 5.5-3 5.5-.5 0 1-1 1.5-2 1.5H12z" fill={fill} />
+                </svg>
+            )
+        case 'card':
+            return (
+                <svg {...common}>
+                    <rect x="2.5" y="5" width="19" height="14" rx="2.5" fill={fill} />
+                    <path d="M2.5 10h19" />
+                    <path d="M6 15h3" />
+                </svg>
+            )
+        case 'lock':
+            return (
+                <svg {...common}>
+                    <rect x="4" y="10.5" width="16" height="10.5" rx="2.5" fill={fill} />
+                    <path d="M7.5 10.5V7a4.5 4.5 0 019 0v3.5" />
+                    <circle cx="12" cy="15.5" r="1.3" fill={color} stroke="none" />
+                </svg>
+            )
+        case 'star':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M12 3.5l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.3 9.9l6-.9L12 3.5z"
+                        fill={fill}
+                    />
+                </svg>
+            )
+        case 'starBurst':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M12 2l1.5 4.8L18 8l-4.5 1.2L12 14l-1.5-4.8L6 8l4.5-1.2L12 2z"
+                        fill={fill}
+                    />
+                </svg>
+            )
+        case 'close':
+            return (
+                <svg {...common}>
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            )
+        case 'bolt':
+            return (
+                <svg {...common}>
+                    <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" fill={fill} />
+                </svg>
+            )
+    }
+}
+
 function AnimatedCount({ to }: { to: number }) {
     const count = useMotionValue(0)
     const rounded = useTransform(count, (v) => Math.round(v).toLocaleString('ru'))
@@ -46,8 +157,17 @@ function ActivationSuccessModal({
 }) {
     const { t } = useTranslation()
 
-    // Confetti emojis
-    const confetti = ['🎉', '✨', '⭐', '👑', '🌟', '💫', '🎊', '⚡']
+    // Confetti — SVG icons cycled
+    const confettiIcons: { name: IconName; color: string }[] = [
+        { name: 'sparkle', color: '#EF9F27' },
+        { name: 'star', color: '#5B6AD0' },
+        { name: 'crown', color: '#EF9F27' },
+        { name: 'starBurst', color: '#FFC56F' },
+        { name: 'bolt', color: '#5B6AD0' },
+        { name: 'sparkle', color: '#1D9E75' },
+        { name: 'star', color: '#EF9F27' },
+        { name: 'starBurst', color: '#5B6AD0' },
+    ]
 
     return (
         <AnimatePresence>
@@ -59,31 +179,34 @@ function ActivationSuccessModal({
                 style={{ fontFamily: FONT }}
             >
                 {/* Confetti rain */}
-                {[...Array(20)].map((_, i) => (
-                    <motion.div
-                        key={i}
-                        className="absolute text-2xl pointer-events-none"
-                        initial={{
-                            top: '-10%',
-                            left: `${Math.random() * 100}%`,
-                            opacity: 0,
-                            rotate: 0,
-                        }}
-                        animate={{
-                            top: '110%',
-                            opacity: [0, 1, 1, 0],
-                            rotate: Math.random() > 0.5 ? 360 : -360,
-                        }}
-                        transition={{
-                            duration: 2.5 + Math.random() * 1.5,
-                            delay: Math.random() * 1.2,
-                            repeat: Infinity,
-                            ease: 'linear',
-                        }}
-                    >
-                        {confetti[i % confetti.length]}
-                    </motion.div>
-                ))}
+                {[...Array(20)].map((_, i) => {
+                    const ic = confettiIcons[i % confettiIcons.length]
+                    return (
+                        <motion.div
+                            key={i}
+                            className="absolute pointer-events-none"
+                            initial={{
+                                top: '-10%',
+                                left: `${Math.random() * 100}%`,
+                                opacity: 0,
+                                rotate: 0,
+                            }}
+                            animate={{
+                                top: '110%',
+                                opacity: [0, 1, 1, 0],
+                                rotate: Math.random() > 0.5 ? 360 : -360,
+                            }}
+                            transition={{
+                                duration: 2.5 + Math.random() * 1.5,
+                                delay: Math.random() * 1.2,
+                                repeat: Infinity,
+                                ease: 'linear',
+                            }}
+                        >
+                            <PIcon name={ic.name} size={22} color={ic.color} fill={ic.color} strokeWidth={1.8} />
+                        </motion.div>
+                    )
+                })}
 
                 <motion.div
                     initial={{ scale: 0.5, opacity: 0, y: 40 }}
@@ -135,7 +258,7 @@ function ActivationSuccessModal({
                                 background: 'linear-gradient(135deg, #EF9F27, #FFC56F)',
                             }}
                         >
-                            <span className="text-xs">👑</span>
+                            <PIcon name="crown" size={12} color="#ffffff" fill="#ffffff" strokeWidth={2} />
                             <span className="text-white text-[11px] font-extrabold uppercase tracking-wider">
                                 PREMIUM FAOL
                             </span>
@@ -370,10 +493,10 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
             {onClose && (
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-white/80 dark:bg-[#1E252E]/80 backdrop-blur flex items-center justify-center text-stone-600 dark:text-slate-300 font-bold text-lg"
+                    className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-white/80 dark:bg-[#1E252E]/80 backdrop-blur flex items-center justify-center text-stone-600 dark:text-slate-300"
                     style={{ boxShadow: '0 4px 12px -4px rgba(0,0,0,0.1)' }}
                 >
-                    ✕
+                    <PIcon name="close" size={18} strokeWidth={2.2} />
                 </button>
             )}
 
@@ -388,7 +511,7 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                 {[...Array(10)].map((_, i) => (
                     <motion.div
                         key={i}
-                        className="absolute text-xl"
+                        className="absolute"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: [0, 1, 0], y: [0, -25, -50] }}
                         transition={{
@@ -402,7 +525,7 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                             top: `${25 + (i % 3) * 18}%`,
                         }}
                     >
-                        ✨
+                        <PIcon name="sparkle" size={18} color="#EF9F27" fill="#EF9F27" strokeWidth={1.8} />
                     </motion.div>
                 ))}
 
@@ -434,7 +557,7 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                             className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-full"
                             style={{ background: 'linear-gradient(135deg, #5B6AD0 0%, #7A8AE8 100%)' }}
                         >
-                            <span className="text-xs">👑</span>
+                            <PIcon name="crown" size={12} color="#ffffff" fill="#ffffff" strokeWidth={2} />
                             <span className="text-white text-[11px] font-extrabold uppercase tracking-wider">
                                 {t('prem_premium')}
                             </span>
@@ -470,8 +593,9 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                         </div>
                         <div className="w-px h-8 bg-stone-200 dark:bg-slate-700" />
                         <div className="text-center">
-                            <div className="text-lg font-extrabold flex items-center justify-center gap-0.5" style={{ color: '#EF9F27' }}>
-                                4.9 <span className="text-sm">★</span>
+                            <div className="text-lg font-extrabold flex items-center justify-center gap-1" style={{ color: '#EF9F27' }}>
+                                <span>4.9</span>
+                                <PIcon name="star" size={14} color="#EF9F27" fill="#EF9F27" strokeWidth={1.8} />
                             </div>
                             <div className="text-[10px] font-bold text-stone-500 dark:text-slate-400 uppercase tracking-wide">
                                 {t('paywall_stat2_label')}
@@ -531,7 +655,12 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                         }}
                     >
                         <div className="flex items-center gap-3 mb-3">
-                            <div className="text-3xl">🎁</div>
+                            <div
+                                className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                                style={{ background: 'rgba(255,255,255,0.22)' }}
+                            >
+                                <PIcon name="gift" size={26} color="#ffffff" fill="rgba(255,255,255,0.3)" strokeWidth={2} />
+                            </div>
                             <div className="flex-1">
                                 <div className="text-white text-base font-extrabold leading-tight">
                                     {t('paywall_trial_title')}
@@ -664,7 +793,13 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
 
                                         <div className="text-right">
                                             <div className={`text-base font-extrabold flex items-center justify-end gap-1 ${active ? 'text-white' : 'text-stone-900 dark:text-slate-100'}`}>
-                                                <span>⭐</span>
+                                                <PIcon
+                                                    name="star"
+                                                    size={14}
+                                                    color={active ? '#ffffff' : '#EF9F27'}
+                                                    fill={active ? '#ffffff' : '#EF9F27'}
+                                                    strokeWidth={1.8}
+                                                />
                                                 <span>{p.stars}</span>
                                             </div>
                                             <div className="flex items-center justify-end gap-1.5 mt-0.5">
@@ -711,10 +846,10 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                         >
                             <div className="flex items-center gap-3">
                                 <div
-                                    className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-lg"
+                                    className="w-11 h-11 rounded-xl flex items-center justify-center"
                                     style={{ background: 'linear-gradient(135deg, #5B6AD0, #7A8AE8)' }}
                                 >
-                                    💳
+                                    <PIcon name="card" size={22} color="#ffffff" strokeWidth={2} />
                                 </div>
                                 <div className="flex-1">
                                     <div className="text-sm font-extrabold text-stone-900 dark:text-slate-100">
@@ -738,7 +873,7 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                                 }}
                             >
                                 <div className="absolute inset-0 bg-white/60 dark:bg-[#1E252E]/70 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-1.5">
-                                    <div className="text-base">🔒</div>
+                                    <PIcon name="lock" size={18} color="#78716C" strokeWidth={2} />
                                     <div
                                         className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
                                         style={{ background: 'linear-gradient(135deg, #EF9F27, #FFC56F)' }}
@@ -770,7 +905,7 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                                 }}
                             >
                                 <div className="absolute inset-0 bg-white/60 dark:bg-[#1E252E]/70 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center gap-1.5">
-                                    <div className="text-base">🔒</div>
+                                    <PIcon name="lock" size={18} color="#78716C" strokeWidth={2} />
                                     <div
                                         className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full text-white"
                                         style={{ background: 'linear-gradient(135deg, #EF9F27, #FFC56F)' }}
@@ -860,7 +995,10 @@ export default function PaywallScreen({ onClose }: { onClose?: () => void }) {
                                 t('paywall_loading')
                             ) : (
                                 <>
-                                    <span>⭐ {selectedPlan.stars} Stars</span>
+                                    <span className="flex items-center gap-1.5">
+                                        <PIcon name="star" size={16} color="#ffffff" fill="#ffffff" strokeWidth={1.8} />
+                                        <span>{selectedPlan.stars} Stars</span>
+                                    </span>
                                     <span className="opacity-60">·</span>
                                     <span>{selectedPlan.title} {t('paywall_subscription')}</span>
                                 </>
