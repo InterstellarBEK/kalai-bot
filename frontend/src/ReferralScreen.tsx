@@ -19,6 +19,148 @@ interface Stats {
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 }
 const BOT_USERNAME = import.meta.env.VITE_BOT_USERNAME || 'kalai_test_bot'
 
+// ── Iconly-style SVG icons ────────────────────────────────
+type RIconName =
+    | 'sparkle' | 'star' | 'crown' | 'heart' | 'gift' | 'rocket' | 'bolt'
+    | 'link' | 'check' | 'clipboard' | 'share' | 'paperPlane'
+    | 'arrowLeft' | 'lock'
+
+function RIcon({
+    name,
+    size = 18,
+    color = 'currentColor',
+    fill = 'none',
+    strokeWidth = 2,
+}: {
+    name: RIconName
+    size?: number
+    color?: string
+    fill?: string
+    strokeWidth?: number
+}) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    }
+    switch (name) {
+        case 'sparkle':
+            return (
+                <svg {...common}>
+                    <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" fill={fill} />
+                </svg>
+            )
+        case 'star':
+            return (
+                <svg {...common}>
+                    <path d="M12 3.5l2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.3 9.9l6-.9L12 3.5z" fill={fill} />
+                </svg>
+            )
+        case 'crown':
+            return (
+                <svg {...common}>
+                    <path d="M3 7l3.5 4L12 5l5.5 6L21 7v11a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" fill={fill} />
+                    <circle cx="3" cy="7" r="1.1" fill={color} stroke="none" />
+                    <circle cx="12" cy="5" r="1.1" fill={color} stroke="none" />
+                    <circle cx="21" cy="7" r="1.1" fill={color} stroke="none" />
+                </svg>
+            )
+        case 'heart':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10z"
+                        fill={fill}
+                    />
+                </svg>
+            )
+        case 'gift':
+            return (
+                <svg {...common}>
+                    <rect x="3.5" y="9" width="17" height="11" rx="1.5" fill={fill} />
+                    <path d="M3.5 13h17" />
+                    <path d="M12 9v11" />
+                    <path d="M12 9c-1.5-3.5-5.5-3-5.5-.5 0 1 1 1.5 2 1.5h3.5z" fill={fill} />
+                    <path d="M12 9c1.5-3.5 5.5-3 5.5-.5 0 1-1 1.5-2 1.5H12z" fill={fill} />
+                </svg>
+            )
+        case 'rocket':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M13.5 3c3 1 5 4 5 7l-3.5 3.5L10 9.5 13.5 3z"
+                        fill={fill}
+                    />
+                    <path d="M10 9.5L5.5 14c-.5.5-.5 1.5 0 2L8 18.5c.5.5 1.5.5 2 0L14.5 14" />
+                    <path d="M8 15l-3 5 5-3" fill={fill} />
+                    <circle cx="14.5" cy="9.5" r="1.2" fill={color} stroke="none" />
+                </svg>
+            )
+        case 'bolt':
+            return (
+                <svg {...common}>
+                    <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" fill={fill} />
+                </svg>
+            )
+        case 'link':
+            return (
+                <svg {...common}>
+                    <path d="M9 15l6-6" />
+                    <path d="M10.5 6L13 3.5a4 4 0 015.5 5.5L16 11.5" fill={fill} />
+                    <path d="M13.5 18L11 20.5a4 4 0 01-5.5-5.5L8 12.5" fill={fill} />
+                </svg>
+            )
+        case 'check':
+            return (
+                <svg {...common}>
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+            )
+        case 'clipboard':
+            return (
+                <svg {...common}>
+                    <rect x="6" y="4" width="12" height="17" rx="2" fill={fill} />
+                    <rect x="9" y="2.5" width="6" height="4" rx="1" fill={color} stroke="none" />
+                    <path d="M9 11h6M9 14.5h6M9 18h4" />
+                </svg>
+            )
+        case 'share':
+            return (
+                <svg {...common}>
+                    <path d="M12 3v13" />
+                    <path d="M7 8l5-5 5 5" />
+                    <path d="M5 14v5a1 1 0 001 1h12a1 1 0 001-1v-5" fill={fill} />
+                </svg>
+            )
+        case 'paperPlane':
+            return (
+                <svg {...common}>
+                    <path d="M22 2L11 13" />
+                    <path d="M22 2l-7 19-4-9-9-4 20-6z" fill={fill} />
+                </svg>
+            )
+        case 'arrowLeft':
+            return (
+                <svg {...common}>
+                    <path d="M19 12H5M11 6l-6 6 6 6" />
+                </svg>
+            )
+        case 'lock':
+            return (
+                <svg {...common}>
+                    <rect x="4" y="10.5" width="16" height="10.5" rx="2.5" fill={fill} />
+                    <path d="M7.5 10.5V7a4.5 4.5 0 019 0v3.5" />
+                    <circle cx="12" cy="15.5" r="1.3" fill={color} stroke="none" />
+                </svg>
+            )
+    }
+}
+
 export default function ReferralScreen({ onClose }: ReferralScreenProps) {
     const { t } = useTranslation()
     const [stats, setStats] = useState<Stats | null>(null)
@@ -112,29 +254,40 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
     const progress = Math.min(100, (total / 3) * 100)
     const hasNoFriends = total === 0
 
+    const confettiIcons: { name: RIconName; color: string }[] = [
+        { name: 'sparkle', color: '#EF9F27' },
+        { name: 'star', color: '#FFD700' },
+        { name: 'crown', color: '#EF9F27' },
+        { name: 'heart', color: '#EC4899' },
+        { name: 'bolt', color: '#5B6AD0' },
+    ]
+
     return (
         <div className="min-h-screen bg-[#ECEEF5] dark:bg-[#0F1419] pb-40" style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}>
             {/* Confetti burst on celebration */}
             <AnimatePresence>
                 {celebrating && (
                     <div className="fixed inset-0 pointer-events-none z-50">
-                        {[...Array(24)].map((_, i) => (
-                            <motion.div
-                                key={i}
-                                initial={{ x: '50vw', y: '40vh', opacity: 1, scale: 0 }}
-                                animate={{
-                                    x: `${50 + (Math.cos(i) * 40)}vw`,
-                                    y: `${40 + (Math.sin(i) * 40)}vh`,
-                                    opacity: 0,
-                                    scale: 1.2,
-                                    rotate: Math.random() * 360,
-                                }}
-                                transition={{ duration: 1.5, ease: 'easeOut' }}
-                                className="absolute text-2xl"
-                            >
-                                {['🎉', '✨', '⭐', '🎊', '💜'][i % 5]}
-                            </motion.div>
-                        ))}
+                        {[...Array(24)].map((_, i) => {
+                            const ic = confettiIcons[i % confettiIcons.length]
+                            return (
+                                <motion.div
+                                    key={i}
+                                    initial={{ x: '50vw', y: '40vh', opacity: 1, scale: 0 }}
+                                    animate={{
+                                        x: `${50 + (Math.cos(i) * 40)}vw`,
+                                        y: `${40 + (Math.sin(i) * 40)}vh`,
+                                        opacity: 0,
+                                        scale: 1.2,
+                                        rotate: Math.random() * 360,
+                                    }}
+                                    transition={{ duration: 1.5, ease: 'easeOut' }}
+                                    className="absolute"
+                                >
+                                    <RIcon name={ic.name} size={24} color={ic.color} fill={ic.color} strokeWidth={1.8} />
+                                </motion.div>
+                            )
+                        })}
                     </div>
                 )}
             </AnimatePresence>
@@ -145,10 +298,10 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                     <motion.button
                         whileTap={{ scale: 0.9 }}
                         onClick={onClose}
-                        className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white dark:bg-[#1E252E] text-lg font-bold"
+                        className="w-10 h-10 rounded-2xl flex items-center justify-center bg-white dark:bg-[#1E252E] text-stone-700 dark:text-slate-300"
                         style={{ boxShadow: '0 4px 12px -4px rgba(91, 106, 208, 0.15)' }}
                     >
-                        ←
+                        <RIcon name="arrowLeft" size={18} strokeWidth={2.2} />
                     </motion.button>
                     <h1 className="text-base font-extrabold text-stone-900 dark:text-slate-100">
                         {t('ref_title')}
@@ -184,11 +337,10 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                     {[...Array(8)].map((_, i) => (
                         <motion.div
                             key={i}
-                            className="absolute text-white"
+                            className="absolute"
                             style={{
                                 top: `${10 + (i * 11) % 75}%`,
                                 left: `${8 + (i * 19) % 84}%`,
-                                fontSize: i % 2 === 0 ? '14px' : '10px',
                             }}
                             animate={{
                                 opacity: [0, 1, 0],
@@ -202,7 +354,13 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                                 ease: 'easeInOut',
                             }}
                         >
-                            ✨
+                            <RIcon
+                                name="sparkle"
+                                size={i % 2 === 0 ? 14 : 10}
+                                color="#ffffff"
+                                fill="#ffffff"
+                                strokeWidth={1.8}
+                            />
                         </motion.div>
                     ))}
 
@@ -245,7 +403,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                                     transition={{ delay: 0.4 }}
                                     className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full bg-white/25 backdrop-blur-sm border border-white/30"
                                 >
-                                    <span className="text-sm">🎁</span>
+                                    <RIcon name="gift" size={14} color="#ffffff" fill="rgba(255,255,255,0.3)" strokeWidth={2} />
                                     <span className="text-white text-xs font-extrabold">
                                         +{stats.bonus_days_earned} {t('ref_premium_earned')}
                                     </span>
@@ -304,7 +462,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                         <Node
                             left="0%"
                             done={true}
-                            icon="🚀"
+                            icon="rocket"
                             label={t('ref_node_start')}
                             color="#5B6AD0"
                             current={total === 0}
@@ -313,7 +471,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                         <Node
                             left="50%"
                             done={tier1Done}
-                            icon="⚡"
+                            icon="bolt"
                             label={t('ref_reward_3')}
                             color="#5B6AD0"
                             current={total === 1 || total === 2}
@@ -322,7 +480,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                         <Node
                             left="100%"
                             done={tier2Done}
-                            icon="👑"
+                            icon="crown"
                             label={t('ref_reward_10')}
                             color="#EC4899"
                             current={tier2Done}
@@ -351,7 +509,10 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                             border: '2px dashed rgba(91,106,208,0.3)',
                         }}
                     >
-                        <div className="text-3xl mb-2">🐺💜</div>
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                            <Bekjon mood="happy" size={48} />
+                            <RIcon name="heart" size={24} color="#EC4899" fill="#EC4899" strokeWidth={1.8} />
+                        </div>
                         <p className="text-sm font-extrabold text-stone-900 dark:text-slate-100">
                             {t('ref_empty_title')}
                         </p>
@@ -370,7 +531,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                 >
                     <RewardCard
                         done={tier1Done}
-                        icon="⚡"
+                        icon="bolt"
                         tier={t('ref_tier1')}
                         requirement={t('ref_req_1')}
                         reward={t('ref_reward_3')}
@@ -378,7 +539,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                     />
                     <RewardCard
                         done={tier2Done}
-                        icon="👑"
+                        icon="crown"
                         tier={t('ref_tier2')}
                         requirement={t('ref_req_3')}
                         reward={t('ref_reward_10')}
@@ -404,7 +565,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                         className="flex items-center gap-2 p-3 rounded-2xl mb-3 cursor-pointer"
                         style={{ background: 'var(--color-input-bg)' }}
                     >
-                        <span className="text-lg">🔗</span>
+                        <RIcon name="link" size={18} color="#5B6AD0" strokeWidth={2} />
                         <div className="flex-1 text-xs font-bold truncate text-stone-700 dark:text-slate-300">
                             t.me/{BOT_USERNAME}?start=ref_{tgId}
                         </div>
@@ -414,19 +575,21 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                                 initial={{ opacity: 0, y: 5 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -5 }}
-                                className="px-3 py-1.5 rounded-xl text-[11px] font-extrabold text-white shrink-0"
+                                className="px-3 py-1.5 rounded-xl text-[11px] font-extrabold text-white shrink-0 flex items-center justify-center"
                                 style={{ background: copied ? '#10b981' : '#5B6AD0' }}
                             >
-                                {copied ? '✓' : t('ref_copy')}
+                                {copied
+                                    ? <RIcon name="check" size={14} color="#ffffff" strokeWidth={2.5} />
+                                    : t('ref_copy')}
                             </motion.div>
                         </AnimatePresence>
                     </motion.div>
 
                     {/* Multi-share row */}
                     <div className="grid grid-cols-3 gap-2">
-                        <ShareIcon icon="📋" label={t('ref_copy')} onClick={copyLink} bg="var(--color-input-bg)" textColor="var(--color-input-text)" />
-                        <ShareIcon icon="📤" label={t('ref_share')} onClick={shareNative} bg="var(--color-input-bg)" textColor="var(--color-input-text)" />
-                        <ShareIcon icon="✈️" label={t('ref_telegram')} onClick={shareViaTelegram} bg="linear-gradient(135deg, #229ED9, #1A82B0)" textColor="#fff" />
+                        <ShareIcon icon="clipboard" label={t('ref_copy')} onClick={copyLink} bg="var(--color-input-bg)" textColor="var(--color-input-text)" />
+                        <ShareIcon icon="share" label={t('ref_share')} onClick={shareNative} bg="var(--color-input-bg)" textColor="var(--color-input-text)" />
+                        <ShareIcon icon="paperPlane" label={t('ref_telegram')} onClick={shareViaTelegram} bg="linear-gradient(135deg, #229ED9, #1A82B0)" textColor="#fff" />
                     </div>
                 </motion.div>
 
@@ -441,11 +604,11 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                     <p className="text-xs font-bold text-stone-500 dark:text-slate-400 uppercase tracking-wider mb-4">
                         {t('ref_how_it_works')}
                     </p>
-                    {[
-                        { n: 1, icon: '📤', t: t('ref_step1') },
-                        { n: 2, icon: '🐺', t: t('ref_step2') },
-                        { n: 3, icon: '🎁', t: t('ref_step3') },
-                    ].map((s, i) => (
+                    {([
+                        { n: 1, icon: 'share' as RIconName, color: '#5B6AD0', t: t('ref_step1') },
+                        { n: 2, icon: null, color: '#EC4899', t: t('ref_step2') },
+                        { n: 3, icon: 'gift' as RIconName, color: '#EF9F27', t: t('ref_step3') },
+                    ]).map((s, i) => (
                         <motion.div
                             key={s.n}
                             initial={{ opacity: 0, x: -10 }}
@@ -454,10 +617,14 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                             className="flex items-center gap-3 py-2"
                         >
                             <div
-                                className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0"
-                                style={{ background: 'var(--color-input-bg)' }}
+                                className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0"
+                                style={{ background: s.color + '22' }}
                             >
-                                {s.icon}
+                                {s.icon ? (
+                                    <RIcon name={s.icon} size={18} color={s.color} fill={s.color + '33'} strokeWidth={2} />
+                                ) : (
+                                    <Bekjon mood="happy" size={28} />
+                                )}
                             </div>
                             <div className="flex-1">
                                 <div className="text-[10px] font-extrabold text-[#5B6AD0] dark:text-[#7A8AE8] uppercase tracking-wider">
@@ -497,7 +664,9 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
                             animate={{ x: ['-120%', '120%'] }}
                             transition={{ duration: 2.5, repeat: Infinity, ease: 'linear' }}
                         />
-                        <span className="relative text-xl">📤</span>
+                        <span className="relative">
+                            <RIcon name="share" size={20} color="#ffffff" fill="rgba(255,255,255,0.25)" strokeWidth={2} />
+                        </span>
                         <span className="relative">{t('ref_send_to_friend')}</span>
                     </motion.button>
                 </div>
@@ -509,7 +678,7 @@ export default function ReferralScreen({ onClose }: ReferralScreenProps) {
 function Node({ left, done, icon, label, color, current }: {
     left: string
     done: boolean
-    icon: string
+    icon: RIconName
     label: string
     color: string
     current: boolean
@@ -522,10 +691,9 @@ function Node({ left, done, icon, label, color, current }: {
             <motion.div
                 animate={current ? { scale: [1, 1.15, 1] } : {}}
                 transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-                className="relative w-11 h-11 rounded-2xl flex items-center justify-center text-lg shadow-lg"
+                className="relative w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg"
                 style={{
                     background: done ? color : 'var(--color-input-bg)',
-                    color: done ? '#fff' : '#94a3b8',
                     border: done ? 'none' : '2px dashed rgba(148,163,184,0.4)',
                 }}
             >
@@ -537,7 +705,15 @@ function Node({ left, done, icon, label, color, current }: {
                         transition={{ duration: 1.5, repeat: Infinity }}
                     />
                 )}
-                <span className="relative">{icon}</span>
+                <span className="relative">
+                    <RIcon
+                        name={icon}
+                        size={20}
+                        color={done ? '#ffffff' : '#94a3b8'}
+                        fill={done ? 'rgba(255,255,255,0.25)' : 'none'}
+                        strokeWidth={2}
+                    />
+                </span>
             </motion.div>
             <div
                 className="text-[10px] font-extrabold mt-1 whitespace-nowrap"
@@ -551,7 +727,7 @@ function Node({ left, done, icon, label, color, current }: {
 
 function RewardCard({ done, icon, tier, requirement, reward, gradient }: {
     done: boolean
-    icon: string
+    icon: RIconName
     tier: string
     requirement: string
     reward: string
@@ -570,10 +746,16 @@ function RewardCard({ done, icon, tier, requirement, reward, gradient }: {
         >
             {done && (
                 <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/30 backdrop-blur flex items-center justify-center">
-                    <span className="text-[10px] font-black text-white">✓</span>
+                    <RIcon name="check" size={10} color="#ffffff" strokeWidth={3} />
                 </div>
             )}
-            <div className="text-2xl mb-1">{done ? icon : '🔒'}</div>
+            <div className="mb-1">
+                {done ? (
+                    <RIcon name={icon} size={26} color="#ffffff" fill="rgba(255,255,255,0.3)" strokeWidth={2} />
+                ) : (
+                    <RIcon name="lock" size={24} color="#94a3b8" strokeWidth={2} />
+                )}
+            </div>
             <div className={`text-[10px] font-extrabold uppercase tracking-wider ${done ? 'text-white/80' : 'text-stone-500 dark:text-slate-400'}`}>
                 {tier}
             </div>
@@ -588,7 +770,7 @@ function RewardCard({ done, icon, tier, requirement, reward, gradient }: {
 }
 
 function ShareIcon({ icon, label, onClick, bg, textColor }: {
-    icon: string
+    icon: RIconName
     label: string
     onClick: () => void
     bg: string
@@ -601,7 +783,7 @@ function ShareIcon({ icon, label, onClick, bg, textColor }: {
             className="py-3 rounded-2xl flex flex-col items-center gap-1"
             style={{ background: bg, color: textColor }}
         >
-            <span className="text-xl">{icon}</span>
+            <RIcon name={icon} size={20} color={textColor} strokeWidth={2} />
             <span className="text-[10px] font-extrabold uppercase tracking-wider">{label}</span>
         </motion.button>
     )
