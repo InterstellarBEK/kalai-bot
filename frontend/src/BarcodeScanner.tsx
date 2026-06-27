@@ -9,6 +9,49 @@ interface Props {
     onDetected: (barcode: string) => void;
 }
 
+// ── Iconly-style SVG icons ────────────────────────────────
+function BIcon({
+    name,
+    size = 18,
+    color = 'currentColor',
+    fill = 'none',
+    strokeWidth = 2,
+}: {
+    name: 'close' | 'keyboard';
+    size?: number;
+    color?: string;
+    fill?: string;
+    strokeWidth?: number;
+}) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    };
+    switch (name) {
+        case 'close':
+            return (
+                <svg {...common}>
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            );
+        case 'keyboard':
+            return (
+                <svg {...common}>
+                    <rect x="2.5" y="6" width="19" height="13" rx="2" fill={fill} />
+                    <path d="M6 10h.01M9.5 10h.01M13 10h.01M16.5 10h.01" />
+                    <path d="M6 13.5h.01M9.5 13.5h.01M13 13.5h.01M16.5 13.5h.01" />
+                    <path d="M7.5 16.5h9" />
+                </svg>
+            );
+    }
+}
+
 export default function BarcodeScanner({ open, onClose, onDetected }: Props) {
     const { t } = useTranslation();
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -134,9 +177,9 @@ export default function BarcodeScanner({ open, onClose, onDetected }: Props) {
                     <div className="absolute top-0 left-0 right-0 pt-[max(env(safe-area-inset-top),1rem)] px-4 flex items-center justify-between">
                         <button
                             onClick={onClose}
-                            className="w-10 h-10 rounded-full bg-black/45 backdrop-blur-md flex items-center justify-center text-white text-2xl active:scale-95 transition"
+                            className="w-10 h-10 rounded-full bg-black/45 backdrop-blur-md flex items-center justify-center text-white active:scale-95 transition"
                         >
-                            ✕
+                            <BIcon name="close" size={20} strokeWidth={2.2} />
                         </button>
                         <div className="px-4 py-2 rounded-full bg-black/45 backdrop-blur-md text-white text-sm font-medium">
                             {t('bc_title')}
@@ -186,9 +229,10 @@ export default function BarcodeScanner({ open, onClose, onDetected }: Props) {
                         ) : (
                             <button
                                 onClick={() => setManualOpen(true)}
-                                className="px-5 py-2.5 rounded-full bg-white/15 backdrop-blur-md text-white text-sm font-medium active:scale-95 transition"
+                                className="px-5 py-2.5 rounded-full bg-white/15 backdrop-blur-md text-white text-sm font-medium active:scale-95 transition inline-flex items-center gap-2"
                             >
-                                ⌨️ {t('bc_manual') || 'Qo\'lda kiritish'}
+                                <BIcon name="keyboard" size={16} strokeWidth={2} />
+                                <span>{t('bc_manual') || "Qo'lda kiritish"}</span>
                             </button>
                         )}
                     </div>
