@@ -25,6 +25,107 @@ const MONTHS: Record<Lang, string[]> = {
     'en': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
 };
 
+// ── Iconly-style SVG icons ────────────────────────────────
+type RIconName = 'pin' | 'chevronDown' | 'check' | 'moon' | 'lock' | 'sunrise' | 'mosque' | 'timer' | 'bulb';
+
+function RIcon({
+    name,
+    size = 18,
+    color = 'currentColor',
+    fill = 'none',
+    strokeWidth = 2,
+}: {
+    name: RIconName;
+    size?: number;
+    color?: string;
+    fill?: string;
+    strokeWidth?: number;
+}) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    };
+    switch (name) {
+        case 'pin':
+            return (
+                <svg {...common}>
+                    <path d="M12 21s-7-7.5-7-12a7 7 0 0114 0c0 4.5-7 12-7 12z" fill={fill} />
+                    <circle cx="12" cy="9" r="2.5" fill={color} stroke="none" />
+                </svg>
+            );
+        case 'chevronDown':
+            return (
+                <svg {...common}>
+                    <path d="M6 9l6 6 6-6" />
+                </svg>
+            );
+        case 'check':
+            return (
+                <svg {...common}>
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+            );
+        case 'moon':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M20 14.5A8.5 8.5 0 019.5 4a1 1 0 00-1.3-1.2A9 9 0 1021.2 15.8a1 1 0 00-1.2-1.3z"
+                        fill={fill}
+                    />
+                </svg>
+            );
+        case 'lock':
+            return (
+                <svg {...common}>
+                    <rect x="4" y="10.5" width="16" height="10.5" rx="2.5" fill={fill} />
+                    <path d="M7.5 10.5V7a4.5 4.5 0 019 0v3.5" />
+                    <circle cx="12" cy="15.5" r="1.3" fill={color} stroke="none" />
+                </svg>
+            );
+        case 'sunrise':
+            return (
+                <svg {...common}>
+                    <path d="M3 18h18" />
+                    <path d="M5.5 15a6.5 6.5 0 0113 0" fill={fill} />
+                    <path d="M12 3v4M5 7l2 2M19 7l-2 2" />
+                </svg>
+            );
+        case 'mosque':
+            return (
+                <svg {...common}>
+                    <path d="M4 20V11a8 8 0 0116 0v9" fill={fill} />
+                    <path d="M4 20h16" />
+                    <path d="M9 20v-5a3 3 0 016 0v5" />
+                    <path d="M12 3v2.5" />
+                    <circle cx="12" cy="2" r="1" fill={color} stroke="none" />
+                </svg>
+            );
+        case 'timer':
+            return (
+                <svg {...common}>
+                    <circle cx="12" cy="13.5" r="7.5" fill={fill} />
+                    <path d="M12 9.5v4l2.5 1.5" />
+                    <path d="M9.5 3h5" />
+                    <path d="M12 3v2.5" />
+                </svg>
+            );
+        case 'bulb':
+            return (
+                <svg {...common}>
+                    <path d="M9 18h6" />
+                    <path d="M10 21h4" />
+                    <path d="M12 3a6 6 0 00-3.5 10.9c.5.4.8 1 .8 1.6V17h5.4v-1.5c0-.6.3-1.2.8-1.6A6 6 0 0012 3z" fill={fill} />
+                </svg>
+            );
+    }
+}
+
 function formatDate(iso: string, lang: Lang): string {
     const [y, m, d] = iso.split('-').map(Number);
     const month = MONTHS[lang][m - 1];
@@ -110,9 +211,9 @@ function RegionChip({ region, onClick }: { region: Region; onClick: () => void }
             className="flex items-center gap-1.5 bg-white dark:bg-[#1E252E] rounded-2xl px-3 py-2"
             style={{ boxShadow: '0 4px 12px -4px rgba(91, 106, 208, 0.15)' }}
         >
-            <span className="text-sm">📍</span>
+            <RIcon name="pin" size={14} color="#5B6AD0" fill="rgba(91, 106, 208, 0.2)" strokeWidth={2} />
             <span className="text-stone-800 dark:text-slate-200 text-[12px] font-extrabold whitespace-nowrap">{region.name}</span>
-            <span className="text-stone-400 dark:text-slate-500 text-[10px]">▼</span>
+            <RIcon name="chevronDown" size={12} color="#94A3B8" strokeWidth={2.4} />
         </motion.button>
     );
 }
@@ -135,7 +236,7 @@ function RegionPicker({ selected, onSelect, onClose, t }: { selected: string; on
                 onClick={(e) => e.stopPropagation()}
                 className="bg-white dark:bg-[#1E252E] w-full max-w-md rounded-t-[2rem] p-5 pb-8 max-h-[80vh] overflow-y-auto"
             >
-                <div className="w-10 h-1 bg-stone-200 rounded-full mx-auto mb-4" />
+                <div className="w-10 h-1 bg-stone-200 dark:bg-slate-700 rounded-full mx-auto mb-4" />
                 <h2 className="text-stone-900 dark:text-slate-100 text-base font-extrabold mb-3">{t('ram_region_pick')}</h2>
                 <div className="space-y-1.5">
                     {UZ_REGIONS.map((r) => {
@@ -152,7 +253,7 @@ function RegionPicker({ selected, onSelect, onClose, t }: { selected: string; on
                                 }}
                             >
                                 <span className="text-sm font-extrabold">{r.name}</span>
-                                {active && <span className="text-sm">✓</span>}
+                                {active && <RIcon name="check" size={16} color="#ffffff" strokeWidth={2.5} />}
                             </motion.button>
                         );
                     })}
@@ -178,7 +279,9 @@ function LockedView({ region, lang, t }: { region: Region; lang: Lang; t: (k: st
                     boxShadow: '0 10px 28px -10px rgba(91, 106, 208, 0.45)',
                 }}
             >
-                <div className="absolute -top-6 -right-6 text-[140px] opacity-10 select-none leading-none">🌙</div>
+                <div className="absolute -top-6 -right-6 opacity-10 select-none">
+                    <RIcon name="moon" size={140} color="#ffffff" fill="#ffffff" strokeWidth={1.5} />
+                </div>
                 <div className="relative">
                     <div className="text-white/80 text-[11px] font-extrabold uppercase tracking-wider mb-2">{t('ram_days_until')}</div>
                     <div className="text-white text-[64px] font-extrabold tabular-nums leading-none">{days}</div>
@@ -204,8 +307,8 @@ function LockedView({ region, lang, t }: { region: Region; lang: Lang; t: (k: st
                         <Bekjon mood="sleeping" size={90} />
                     </div>
                     <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full" style={{ background: 'var(--color-input-bg)' }}>
-                        <span className="text-sm">🔒</span>
-                        <span className="text-stone-600 text-xs font-extrabold uppercase tracking-wider">{t('ram_locked_badge')}</span>
+                        <RIcon name="lock" size={12} color="#78716C" strokeWidth={2} />
+                        <span className="text-stone-600 dark:text-slate-300 text-xs font-extrabold uppercase tracking-wider">{t('ram_locked_badge')}</span>
                     </div>
                     <div className="text-stone-900 dark:text-slate-100 font-extrabold text-base mt-3">{t('ram_locked_title')}</div>
                     <div className="text-stone-500 dark:text-slate-400 text-[13px] font-semibold mt-1 leading-relaxed max-w-[280px]">
@@ -223,10 +326,10 @@ function LockedView({ region, lang, t }: { region: Region; lang: Lang; t: (k: st
             >
                 <h2 className="text-stone-900 dark:text-slate-100 text-sm font-extrabold uppercase tracking-wider mb-3">{t('ram_what')}</h2>
                 <div className="space-y-2.5">
-                    <FeatureRow icon="🌅" label={`${region.name} ${t('ram_feat_countdown')}`} />
-                    <FeatureRow icon="🕌" label={`${region.name} ${t('ram_feat_prayer')}`} />
-                    <FeatureRow icon="⏱️" label={t('ram_feat_timer')} />
-                    <FeatureRow icon="💡" label={t('ram_feat_tips')} />
+                    <FeatureRow icon="sunrise" color="#EF9F27" label={`${region.name} ${t('ram_feat_countdown')}`} />
+                    <FeatureRow icon="mosque" color="#5B6AD0" label={`${region.name} ${t('ram_feat_prayer')}`} />
+                    <FeatureRow icon="timer" color="#1D9E75" label={t('ram_feat_timer')} />
+                    <FeatureRow icon="bulb" color="#EF9F27" label={t('ram_feat_tips')} />
                 </div>
             </motion.div>
         </>
@@ -254,7 +357,15 @@ function ActiveView({ status, allTimes, region, t }: { status: RamadanStatus; al
                     boxShadow: '0 10px 28px -10px rgba(91, 106, 208, 0.45)',
                 }}
             >
-                <div className="absolute -top-4 -right-4 text-8xl opacity-15 select-none">{isFasting ? '🌙' : '🌅'}</div>
+                <div className="absolute -top-4 -right-4 opacity-15 select-none">
+                    <RIcon
+                        name={isFasting ? 'moon' : 'sunrise'}
+                        size={100}
+                        color="#ffffff"
+                        fill="#ffffff"
+                        strokeWidth={1.5}
+                    />
+                </div>
                 <div className="relative">
                     <div className="text-white/80 text-[12px] font-bold mb-1">{label}</div>
                     <div className="text-white text-[44px] font-extrabold tabular-nums leading-none mb-4">
@@ -318,16 +429,21 @@ function PrayerRow({ label, time, highlight }: { label: string; time: string; hi
     const bg = highlight === 'iftar' ? '#FFF4D6' : highlight === 'sahar' ? '#DDE3F5' : '#F3F4F8';
     return (
         <div className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ background: bg }}>
-            <div className="text-stone-800 dark:text-slate-200 text-[13px] font-extrabold">{label}</div>
-            <div className="text-stone-900 dark:text-slate-100 text-base font-extrabold tabular-nums">{time}</div>
+            <div className="text-stone-800 text-[13px] font-extrabold">{label}</div>
+            <div className="text-stone-900 text-base font-extrabold tabular-nums">{time}</div>
         </div>
     );
 }
 
-function FeatureRow({ icon, label }: { icon: string; label: string }) {
+function FeatureRow({ icon, color, label }: { icon: RIconName; color: string; label: string }) {
     return (
         <div className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: 'var(--color-input-bg)' }}>
-            <span className="text-xl">{icon}</span>
+            <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: color + '22' }}
+            >
+                <RIcon name={icon} size={18} color={color} fill={color + '33'} strokeWidth={2} />
+            </div>
             <span className=" text-stone-700 dark:text-slate-300 text-[13px] font-bold">{label}</span>
         </div>
     );
