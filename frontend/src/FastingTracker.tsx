@@ -26,6 +26,64 @@ interface Props {
 
 const spring = { type: 'spring', stiffness: 280, damping: 26 } as const;
 
+// ── Iconly-style SVG icons ────────────────────────────────
+function FIcon({
+    name,
+    size = 18,
+    color = 'currentColor',
+    fill = 'none',
+    strokeWidth = 2,
+}: {
+    name: 'timer' | 'moon' | 'check' | 'close';
+    size?: number;
+    color?: string;
+    fill?: string;
+    strokeWidth?: number;
+}) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    };
+    switch (name) {
+        case 'timer':
+            return (
+                <svg {...common}>
+                    <circle cx="12" cy="13.5" r="7.5" fill={fill} />
+                    <path d="M12 9.5v4l2.5 1.5" />
+                    <path d="M9.5 3h5" />
+                    <path d="M12 3v2.5" />
+                </svg>
+            );
+        case 'moon':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M20 14.5A8.5 8.5 0 019.5 4a1 1 0 00-1.3-1.2A9 9 0 1021.2 15.8a1 1 0 00-1.2-1.3z"
+                        fill={fill}
+                    />
+                </svg>
+            );
+        case 'check':
+            return (
+                <svg {...common}>
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+            );
+        case 'close':
+            return (
+                <svg {...common}>
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            );
+    }
+}
+
 export function FastingTracker({ telegramId }: Props) {
     const { t } = useTranslation();
     const [active, setActive] = useState<FastingSession | null>(null);
@@ -134,7 +192,12 @@ export function FastingTracker({ telegramId }: Props) {
                         {active ? t('fast_active') : t('fast_subtitle')}
                     </p>
                 </div>
-                <span className="text-2xl">⏱️</span>
+                <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    style={{ background: 'rgba(91, 106, 208, 0.12)' }}
+                >
+                    <FIcon name="timer" size={22} color="#5B6AD0" fill="rgba(91, 106, 208, 0.2)" strokeWidth={2} />
+                </div>
             </div>
 
             <AnimatePresence>
@@ -177,13 +240,17 @@ export function FastingTracker({ telegramId }: Props) {
                         {recent.map((r) => (
                             <div
                                 key={r.id}
-                                className={`flex-1 h-8 rounded-lg flex items-center justify-center text-[10px] font-semibold ${r.status === 'completed'
+                                className={`flex-1 h-8 rounded-lg flex items-center justify-center ${r.status === 'completed'
                                     ? 'bg-[#DDE3F5] dark:bg-[#1F2330] text-[#5B6AD0] dark:text-[#8B96E0]'
                                     : 'bg-gray-100 dark:bg-[#252D38] text-gray-400 dark:text-slate-500'
                                     }`}
                                 title={`${r.target_hours}s - ${r.status}`}
                             >
-                                {r.status === 'completed' ? '✓' : '✕'}
+                                <FIcon
+                                    name={r.status === 'completed' ? 'check' : 'close'}
+                                    size={14}
+                                    strokeWidth={2.5}
+                                />
                             </div>
                         ))}
                     </div>
@@ -219,10 +286,12 @@ function RamadanBanner({
             className="mb-4 rounded-2xl p-4 relative overflow-hidden"
             style={{ background: 'linear-gradient(135deg, #3D4FAA 0%, #5B6AD0 100%)' }}
         >
-            <div className="absolute -top-2 -right-2 text-5xl opacity-15 select-none">🌙</div>
+            <div className="absolute -top-3 -right-3 opacity-15 select-none">
+                <FIcon name="moon" size={80} color="#ffffff" fill="#ffffff" strokeWidth={1.5} />
+            </div>
             <div className="relative">
                 <div className="flex items-center gap-2 mb-1">
-                    <span className="text-base">🌙</span>
+                    <FIcon name="moon" size={16} color="#ffffff" fill="#ffffff" strokeWidth={2} />
                     <div className="text-white text-sm font-extrabold">{t('fast_ramadan_title')}</div>
                 </div>
                 <div className="text-white/80 text-[11px] font-semibold mb-2.5">
