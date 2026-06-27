@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
 interface WheelPickerProps {
     min: number;
@@ -24,19 +24,29 @@ export default function WheelPicker({
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollTimeoutRef = useRef<number | null>(null);
     const isScrollingRef = useRef(false);
+    const isMountedRef = useRef(false);
     const [activeValue, setActiveValue] = useState(value);
 
-    const items: number[] = [];
-    for (let i = min; i <= max; i += step) items.push(i);
+    // ✅ FIX 1: items'ni memoize qilish — har render'da qayta yaratilmasin
+    const items = useMemo(() => {
+        const arr: number[] = [];
+        for (let i = min; i <= max; i += step) arr.push(i);
+        return arr;
+    }, [min, max, step]);
 
-    // value tashqaridan o'zgarsa — scroll pozitsiyani yangila
+    // ✅ FIX 2: value tashqaridan o'zgarsa scroll'ni yangila (faqat value o'zgarsa)
     useEffect(() => {
         if (!containerRef.current) return;
         if (isScrollingRef.current) return;
         const idx = items.indexOf(value);
         if (idx === -1) return;
-        containerRef.current.scrollTop = idx * ITEM_HEIGHT;
+        // Mount paytida instant, keyin smooth
+        containerRef.current.scrollTo({
+            top: idx * ITEM_HEIGHT,
+            behavior: isMountedRef.current ? 'smooth' : 'auto',
+        });
         setActiveValue(value);
+        isMountedRef.current = true;
     }, [value, items]);
 
     // Telegram haptic
@@ -57,10 +67,13 @@ export default function WheelPicker({
         const clampedIdx = Math.max(0, Math.min(items.length - 1, idx));
         const newValue = items[clampedIdx];
 
-        if (newValue !== activeValue) {
-            setActiveValue(newValue);
-            triggerHaptic();
-        }
+        setActiveValue((prev) => {
+            if (prev !== newValue) {
+                triggerHaptic();
+                return newValue;
+            }
+            return prev;
+        });
 
         if (scrollTimeoutRef.current) {
             window.clearTimeout(scrollTimeoutRef.current);
@@ -70,14 +83,17 @@ export default function WheelPicker({
             const finalIdx = Math.round(containerRef.current.scrollTop / ITEM_HEIGHT);
             const finalClamped = Math.max(0, Math.min(items.length - 1, finalIdx));
             const finalValue = items[finalClamped];
-            containerRef.current.scrollTo({
-                top: finalClamped * ITEM_HEIGHT,
-                behavior: 'smooth',
-            });
+            const targetTop = finalClamped * ITEM_HEIGHT;
+            if (Math.abs(containerRef.current.scrollTop - targetTop) > 1) {
+                containerRef.current.scrollTo({
+                    top: targetTop,
+                    behavior: 'smooth',
+                });
+            }
             isScrollingRef.current = false;
             if (finalValue !== value) onChange(finalValue);
-        }, 120);
-    }, [activeValue, items, onChange, triggerHaptic, value]);
+        }, 150);
+    }, [items, onChange, triggerHaptic, value]);
 
     const handleItemClick = (idx: number) => {
         if (!containerRef.current) return;
@@ -86,6 +102,15 @@ export default function WheelPicker({
             behavior: 'smooth',
         });
     };
+
+    // ✅ FIX 3: cleanup timeout
+    useEffect(() => {
+        return () => {
+            if (scrollTimeoutRef.current) {
+                window.clearTimeout(scrollTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const containerHeight = ITEM_HEIGHT * VISIBLE_ITEMS;
     const padding = ITEM_HEIGHT * CENTER_OFFSET;
@@ -97,7 +122,7 @@ export default function WheelPicker({
         >
             {/* Markaziy chiziqlar */}
             <div
-                className="pointer-events-none absolute inset-x-0 z-10 border-y border-[#1D9E75]/30"
+                className="pointer-events-none absolute inset-x-0 z-10 border-y border-[#5B6AD0]/30"
                 style={{
                     top: padding,
                     height: ITEM_HEIGHT,
@@ -110,7 +135,7 @@ export default function WheelPicker({
                 style={{
                     height: padding,
                     background:
-                        'linear-gradient(to bottom, var(--color-bg, #fff) 0%, transparent 100%)',
+                        'linear-gradient(to bottom, var(--color-input-bg, #F3F4F8) 0%, transparent 100%)',
                 }}
             />
             <div
@@ -118,11 +143,11 @@ export default function WheelPicker({
                 style={{
                     height: padding,
                     background:
-                        'linear-gradient(to top, var(--color-bg, #fff) 0%, transparent 100%)',
+                        'linear-gradient(to top, var(--color-input-bg, #F3F4F8) 0%, transparent 100%)',
                 }}
             />
 
-            {/* Scroll container */}
+            {/* ✅ FIX 4: Scroll container — Telegram WebView uchun touch optimizatsiyalar */}
             <div
                 ref={containerRef}
                 onScroll={handleScroll}
@@ -130,6 +155,8 @@ export default function WheelPicker({
                 style={{
                     scrollSnapType: 'y mandatory',
                     WebkitOverflowScrolling: 'touch',
+                    overscrollBehavior: 'contain', // Parent scroll'ga tarqalmasin
+                    touchAction: 'pan-y',          // Telegram gesture'iga ustun bersin
                 }}
             >
                 <div style={{ paddingTop: padding, paddingBottom: padding }}>
@@ -147,15 +174,16 @@ export default function WheelPicker({
                                 style={{
                                     height: ITEM_HEIGHT,
                                     scrollSnapAlign: 'center',
-                                    scrollSnapStop: 'always',
+                                    // ✅ FIX 5: scrollSnapStop 'always' → 'normal' (mobile uchun yumshoqroq)
+                                    scrollSnapStop: 'normal',
                                     opacity,
                                     transform: `scale(${scale})`,
                                 }}
                             >
                                 <span
                                     className={`text-2xl font-semibold tabular-nums ${isActive
-                                            ? 'text-[#1D9E75] dark:text-[#22b886]'
-                                            : 'text-stone-700 dark:text-stone-300'
+                                        ? 'text-[#5B6AD0] dark:text-[#7A8AE8]'
+                                        : 'text-stone-700 dark:text-stone-300'
                                         }`}
                                 >
                                     {item}
