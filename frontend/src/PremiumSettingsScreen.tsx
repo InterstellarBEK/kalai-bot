@@ -22,11 +22,112 @@ interface PremiumInfo {
     totalDays: number
 }
 
-const PLAN_EMOJI: Record<string, string> = {
-    weekly: '⚡',
-    monthly: '🌙',
-    yearly: '👑',
-    trial: '🎁',
+// ── Iconly-style SVG icons ────────────────────────────────
+type PIconName =
+    | 'arrowLeft' | 'chevronRight' | 'sparkle' | 'crown' | 'bolt' | 'moon'
+    | 'gift' | 'robot' | 'chart' | 'calendar' | 'target'
+
+function PIcon({
+    name,
+    size = 18,
+    color = 'currentColor',
+    fill = 'none',
+    strokeWidth = 2,
+}: {
+    name: PIconName
+    size?: number
+    color?: string
+    fill?: string
+    strokeWidth?: number
+}) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    }
+    switch (name) {
+        case 'arrowLeft':
+            return <svg {...common}><path d="M19 12H5M11 6l-6 6 6 6" /></svg>
+        case 'chevronRight':
+            return <svg {...common}><path d="M9 6l6 6-6 6" /></svg>
+        case 'sparkle':
+            return <svg {...common}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" fill={fill} /></svg>
+        case 'crown':
+            return (
+                <svg {...common}>
+                    <path d="M3 7l3.5 4L12 5l5.5 6L21 7v11a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" fill={fill} />
+                    <circle cx="3" cy="7" r="1.1" fill={color} stroke="none" />
+                    <circle cx="12" cy="5" r="1.1" fill={color} stroke="none" />
+                    <circle cx="21" cy="7" r="1.1" fill={color} stroke="none" />
+                </svg>
+            )
+        case 'bolt':
+            return <svg {...common}><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" fill={fill} /></svg>
+        case 'moon':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M20 14.5A8.5 8.5 0 019.5 4a1 1 0 00-1.3-1.2A9 9 0 1021.2 15.8a1 1 0 00-1.2-1.3z"
+                        fill={fill}
+                    />
+                </svg>
+            )
+        case 'gift':
+            return (
+                <svg {...common}>
+                    <rect x="3.5" y="9" width="17" height="11" rx="1.5" fill={fill} />
+                    <path d="M3.5 13h17" />
+                    <path d="M12 9v11" />
+                    <path d="M12 9c-1.5-3.5-5.5-3-5.5-.5 0 1 1 1.5 2 1.5h3.5z" fill={fill} />
+                    <path d="M12 9c1.5-3.5 5.5-3 5.5-.5 0 1-1 1.5-2 1.5H12z" fill={fill} />
+                </svg>
+            )
+        case 'robot':
+            return (
+                <svg {...common}>
+                    <rect x="4" y="8" width="16" height="12" rx="3" fill={fill} />
+                    <path d="M12 5v3" />
+                    <circle cx="12" cy="4" r="1" fill={color} stroke="none" />
+                    <circle cx="9" cy="13.5" r="1.2" fill={color} stroke="none" />
+                    <circle cx="15" cy="13.5" r="1.2" fill={color} stroke="none" />
+                    <path d="M9.5 17h5" />
+                </svg>
+            )
+        case 'chart':
+            return (
+                <svg {...common}>
+                    <rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill={fill} />
+                    <path d="M7.5 16v-4M12 16V9M16.5 16v-2.5" />
+                </svg>
+            )
+        case 'calendar':
+            return (
+                <svg {...common}>
+                    <rect x="3.5" y="5.5" width="17" height="15" rx="2" fill={fill} />
+                    <path d="M3.5 10h17M8 3v4M16 3v4" />
+                </svg>
+            )
+        case 'target':
+            return (
+                <svg {...common}>
+                    <circle cx="12" cy="12" r="9" fill={fill} />
+                    <circle cx="12" cy="12" r="5.5" />
+                    <circle cx="12" cy="12" r="2" fill={color} stroke="none" />
+                </svg>
+            )
+    }
+}
+
+const PLAN_ICON: Record<string, { name: PIconName; color: string }> = {
+    weekly: { name: 'bolt', color: '#FFD93D' },
+    monthly: { name: 'moon', color: '#FFD93D' },
+    yearly: { name: 'crown', color: '#FFD93D' },
+    trial: { name: 'gift', color: '#FFD93D' },
 }
 
 const PLAN_DAYS: Record<string, number> = {
@@ -52,12 +153,12 @@ export default function PremiumSettingsScreen({ onBack, onUpgrade, onReferral }:
         }
     }
 
-    const COMPARE = [
-        { icon: '🤖', label: t('prem_feat_ai'), free: `3${t('prem_per_day')}`, premium: t('prem_unlimited') },
-        { icon: '📊', label: t('prem_feat_forecast'), free: '—', premium: '✓' },
-        { icon: '✨', label: t('prem_feat_skins'), free: t('prem_skin_free'), premium: t('prem_skin_premium') },
-        { icon: '📅', label: t('prem_feat_export'), free: '—', premium: '✓' },
-        { icon: '🎯', label: t('prem_feat_goals'), free: '—', premium: '✓' },
+    const COMPARE: { icon: PIconName; color: string; label: string; free: string; premium: string }[] = [
+        { icon: 'robot', color: '#5B6AD0', label: t('prem_feat_ai'), free: `3${t('prem_per_day')}`, premium: t('prem_unlimited') },
+        { icon: 'chart', color: '#EC4899', label: t('prem_feat_forecast'), free: '—', premium: '✓' },
+        { icon: 'sparkle', color: '#EF9F27', label: t('prem_feat_skins'), free: t('prem_skin_free'), premium: t('prem_skin_premium') },
+        { icon: 'calendar', color: '#1D9E75', label: t('prem_feat_export'), free: '—', premium: '✓' },
+        { icon: 'target', color: '#5B6AD0', label: t('prem_feat_goals'), free: '—', premium: '✓' },
     ]
 
     const REFERRAL_TIERS = [
@@ -110,7 +211,7 @@ export default function PremiumSettingsScreen({ onBack, onUpgrade, onReferral }:
     }
 
     const progress = info && info.totalDays > 0 ? Math.min(100, (info.daysLeft / info.totalDays) * 100) : 0
-    const planEmoji = info?.plan ? PLAN_EMOJI[info.plan] : null
+    const planIcon = info?.plan ? PLAN_ICON[info.plan] : null
 
     return (
         <div className="min-h-screen relative overflow-hidden" style={{ background: 'var(--color-bg)', fontFamily: FONT }}>
@@ -121,8 +222,12 @@ export default function PremiumSettingsScreen({ onBack, onUpgrade, onReferral }:
 
             <div className="sticky top-0 z-20 backdrop-blur-xl px-4 py-3 flex items-center gap-3"
                 style={{ background: 'color-mix(in srgb, var(--color-bg) 70%, transparent)' }}>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={onBack} className="p-1 text-2xl text-[#1c1917] dark:text-white">
-                    ‹
+                <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={onBack}
+                    className="p-2 text-[#1c1917] dark:text-white"
+                >
+                    <PIcon name="arrowLeft" size={20} strokeWidth={2.2} />
                 </motion.button>
                 <h1 className="text-lg font-bold text-[#1c1917] dark:text-white">{t('prem_title')}</h1>
             </div>
@@ -162,12 +267,12 @@ export default function PremiumSettingsScreen({ onBack, onUpgrade, onReferral }:
                         {info?.isPremium && [0, 1, 2].map((i) => (
                             <motion.div
                                 key={i}
-                                className="absolute text-white/80"
-                                style={{ top: `${15 + i * 25}%`, right: `${10 + i * 12}%`, fontSize: `${14 + i * 2}px` }}
+                                className="absolute"
+                                style={{ top: `${15 + i * 25}%`, right: `${10 + i * 12}%` }}
                                 animate={{ y: [-4, 4, -4], opacity: [0.4, 1, 0.4] }}
                                 transition={{ duration: 2 + i * 0.4, repeat: Infinity, ease: 'easeInOut' }}
                             >
-                                ✨
+                                <PIcon name="sparkle" size={14 + i * 2} color="#ffffff" fill="#ffffff" strokeWidth={1.8} />
                             </motion.div>
                         ))}
 
@@ -177,12 +282,14 @@ export default function PremiumSettingsScreen({ onBack, onUpgrade, onReferral }:
                                     initial={{ rotate: -10, scale: 0.8 }}
                                     animate={{ rotate: 0, scale: 1 }}
                                     transition={{ type: 'spring', stiffness: 200, damping: 12, delay: 0.1 }}
-                                    className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl"
+                                    className="w-14 h-14 rounded-2xl flex items-center justify-center"
                                     style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(10px)' }}
                                 >
-                                    👑
+                                    <PIcon name="crown" size={28} color="#FFD93D" fill="rgba(255, 217, 61, 0.3)" strokeWidth={2} />
                                 </motion.div>
-                                {planEmoji && <div className="text-3xl">{planEmoji}</div>}
+                                {planIcon && (
+                                    <PIcon name={planIcon.name} size={28} color={planIcon.color} fill={planIcon.color + '55'} strokeWidth={2} />
+                                )}
                             </div>
 
                             <div className="text-white/80 text-sm font-medium mb-1">
@@ -275,7 +382,12 @@ export default function PremiumSettingsScreen({ onBack, onUpgrade, onReferral }:
                                     className="flex items-center justify-between"
                                 >
                                     <div className="flex items-center gap-2.5">
-                                        <span className="text-lg">{c.icon}</span>
+                                        <div
+                                            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                                            style={{ background: c.color + '22' }}
+                                        >
+                                            <PIcon name={c.icon} size={16} color={c.color} fill={c.color + '33'} strokeWidth={2} />
+                                        </div>
                                         <span className="text-sm text-[#1c1917] dark:text-white">{c.label}</span>
                                     </div>
                                     <div className="flex gap-3 text-sm">
@@ -301,15 +413,17 @@ export default function PremiumSettingsScreen({ onBack, onUpgrade, onReferral }:
                             <motion.div
                                 animate={{ rotate: [0, -10, 10, -10, 0] }}
                                 transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-                                className="w-12 h-12 rounded-2xl flex items-center justify-center bg-white text-2xl"
+                                className="w-12 h-12 rounded-2xl flex items-center justify-center bg-white"
                             >
-                                🎁
+                                <PIcon name="gift" size={26} color="#EF9F27" fill="rgba(239, 159, 39, 0.25)" strokeWidth={2} />
                             </motion.div>
                             <div className="flex-1">
                                 <div className="font-bold text-[#1c1917]">{t('prem_referral_title')}</div>
                                 <div className="text-xs text-[#78716c] mt-0.5">{t('prem_referral_sub')}</div>
                             </div>
-                            <div className="text-2xl text-[#78716c]">›</div>
+                            <div className="text-[#78716c]">
+                                <PIcon name="chevronRight" size={20} strokeWidth={2.2} />
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             {REFERRAL_TIERS.map((tier) => (
