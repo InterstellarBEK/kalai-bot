@@ -29,6 +29,63 @@ interface PaymentData {
     expires_at: string
 }
 
+// ── Iconly-style SVG icons ────────────────────────────────
+function PIcon({
+    name,
+    size = 18,
+    color = 'currentColor',
+    fill = 'none',
+    strokeWidth = 2,
+}: {
+    name: 'close' | 'errorCircle' | 'camera' | 'check'
+    size?: number
+    color?: string
+    fill?: string
+    strokeWidth?: number
+}) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    }
+    switch (name) {
+        case 'close':
+            return (
+                <svg {...common}>
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            )
+        case 'errorCircle':
+            return (
+                <svg {...common}>
+                    <circle cx="12" cy="12" r="9.5" fill={fill} />
+                    <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" />
+                </svg>
+            )
+        case 'camera':
+            return (
+                <svg {...common}>
+                    <path
+                        d="M3.5 8h3l1.5-2.5h8L17.5 8h3a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5h-17A1.5 1.5 0 012 18.5v-9A1.5 1.5 0 013.5 8z"
+                        fill={fill}
+                    />
+                    <circle cx="12" cy="13.5" r="3.5" />
+                </svg>
+            )
+        case 'check':
+            return (
+                <svg {...common}>
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+            )
+    }
+}
+
 function fmt(template: string, vars: Record<string, string | number>): string {
     return template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? `{${k}}`))
 }
@@ -224,9 +281,9 @@ export default function P2PPaymentModal({ plan, onClose, onReceiptUploaded }: Pr
                         </h2>
                         <button
                             onClick={onClose}
-                            className="w-8 h-8 rounded-full bg-white dark:bg-[#1E252E] flex items-center justify-center text-stone-600 dark:text-slate-300 font-bold"
+                            className="w-8 h-8 rounded-full bg-white dark:bg-[#1E252E] flex items-center justify-center text-stone-600 dark:text-slate-300"
                         >
-                            ✕
+                            <PIcon name="close" size={16} strokeWidth={2.2} />
                         </button>
                     </div>
 
@@ -237,8 +294,9 @@ export default function P2PPaymentModal({ plan, onClose, onReceiptUploaded }: Pr
                     )}
 
                     {error && (
-                        <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-2xl p-4 text-sm font-semibold text-center">
-                            ❌ {error}
+                        <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-2xl p-4 text-sm font-semibold flex items-center justify-center gap-2">
+                            <PIcon name="errorCircle" size={18} color="#DC2626" fill="rgba(220, 38, 38, 0.15)" strokeWidth={2} />
+                            <span>{error}</span>
                         </div>
                     )}
 
@@ -323,8 +381,9 @@ export default function P2PPaymentModal({ plan, onClose, onReceiptUploaded }: Pr
                                 className="bg-white dark:bg-[#1E252E] rounded-2xl p-4 mb-3"
                                 style={{ border: '1.5px solid #E4E7F0' }}
                             >
-                                <div className="text-xs font-extrabold text-stone-700 dark:text-slate-200 mb-2">
-                                    📸 {t('p2p_upload_title') || "To'lov chekini yuklang"}
+                                <div className="text-xs font-extrabold text-stone-700 dark:text-slate-200 mb-2 flex items-center gap-1.5">
+                                    <PIcon name="camera" size={16} color="#5B6AD0" fill="rgba(91, 106, 208, 0.15)" strokeWidth={2} />
+                                    <span>{t('p2p_upload_title') || "To'lov chekini yuklang"}</span>
                                 </div>
                                 <div className="text-[11px] text-stone-500 dark:text-slate-400 mb-3 font-semibold">
                                     {t('p2p_upload_hint') || "To'lov qilganingizdan keyin chek skrinshotini yuklang. Admin 5-30 daqiqada tasdiqlaydi."}
@@ -343,20 +402,25 @@ export default function P2PPaymentModal({ plan, onClose, onReceiptUploaded }: Pr
                                     whileTap={{ scale: 0.97 }}
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={uploading || expired || uploadStatus === 'success'}
-                                    className="w-full py-3 rounded-xl text-sm font-extrabold text-white disabled:opacity-50"
+                                    className="w-full py-3 rounded-xl text-sm font-extrabold text-white disabled:opacity-50 flex items-center justify-center gap-2"
                                     style={{
                                         background: uploadStatus === 'success'
                                             ? 'linear-gradient(135deg,#10B981,#34D399)'
                                             : 'linear-gradient(135deg,#5B6AD0,#7A8AE8)'
                                     }}
                                 >
-                                    {uploading
-                                        ? (t('p2p_upload_loading') || 'Yuklanmoqda...')
-                                        : uploadStatus === 'success'
-                                            ? (t('p2p_upload_done') || '✓ Yuklandi')
-                                            : expired
-                                                ? (t('p2p_expired') || 'Vaqt tugadi')
-                                                : (t('p2p_upload_button') || 'Chek rasmini tanlash')}
+                                    {uploading ? (
+                                        <span>{t('p2p_upload_loading') || 'Yuklanmoqda...'}</span>
+                                    ) : uploadStatus === 'success' ? (
+                                        <>
+                                            <PIcon name="check" size={16} color="#ffffff" strokeWidth={2.5} />
+                                            <span>{t('p2p_upload_done') || 'Yuklandi'}</span>
+                                        </>
+                                    ) : expired ? (
+                                        <span>{t('p2p_expired') || 'Vaqt tugadi'}</span>
+                                    ) : (
+                                        <span>{t('p2p_upload_button') || 'Chek rasmini tanlash'}</span>
+                                    )}
                                 </motion.button>
 
                                 {uploadMessage && (
