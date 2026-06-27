@@ -6,6 +6,7 @@ import Dashboard from './Dashboard'
 import Onboarding from './Onboarding'
 import Scanner from './pages/Scanner'
 import Bekjon from './components/Bekjon'
+import WheelPicker from './components/WheelPicker'
 import RamadanScreen from './RamadanScreen'
 import PaywallScreen from './PaywallScreen'
 import PremiumSettingsScreen from './PremiumSettingsScreen'
@@ -25,8 +26,10 @@ const AGE_MIN = 13
 const AGE_MAX = 100
 const WEIGHT_MIN = 30
 const WEIGHT_MAX = 300
+const WEIGHT_DEFAULT = 70
 const HEIGHT_MIN = 100
 const HEIGHT_MAX = 250
+const HEIGHT_DEFAULT = 170
 
 const LANG_OPTIONS: { key: Lang; flag: string; label: string; sub?: string }[] = [
   { key: 'uz-Latn', flag: '🇺🇿', label: "O'zbek", sub: 'Lotin' },
@@ -312,6 +315,12 @@ function ProfileForm(props: any) {
   const ageNum = parseInt(age, 10)
   const ageValue = isNaN(ageNum) ? 19 : Math.max(AGE_MIN, Math.min(AGE_MAX, ageNum))
 
+  // Weight/Height string ↔ number bridge
+  const weightNum = parseFloat(weight)
+  const weightValue = isNaN(weightNum) ? WEIGHT_DEFAULT : Math.max(WEIGHT_MIN, Math.min(WEIGHT_MAX, Math.round(weightNum)))
+  const heightNum = parseFloat(height)
+  const heightValue = isNaN(heightNum) ? HEIGHT_DEFAULT : Math.max(HEIGHT_MIN, Math.min(HEIGHT_MAX, Math.round(heightNum)))
+
   return (
     <div className="min-h-screen pb-28 bg-[#ECEEF5] dark:bg-[#0F1419]">
       <div className="max-w-md mx-auto px-5 pt-7">
@@ -459,13 +468,36 @@ function ProfileForm(props: any) {
             />
           </Section>
 
-          <Section label={t('section_weight')}>
-            <Input value={weight} onChange={setWeight} placeholder="70" min={WEIGHT_MIN} max={WEIGHT_MAX} suffix="kg" />
-          </Section>
-
-          <Section label={t('section_height')}>
-            <Input value={height} onChange={setHeight} placeholder="175" min={HEIGHT_MIN} max={HEIGHT_MAX} suffix="cm" />
-          </Section>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="block text-xs font-bold text-stone-600 dark:text-slate-400 uppercase tracking-wider mb-2 text-center">
+                {t('section_weight')}
+              </label>
+              <div className="rounded-2xl" style={{ background: 'var(--color-input-bg)' }}>
+                <WheelPicker
+                  min={WEIGHT_MIN}
+                  max={WEIGHT_MAX}
+                  value={weightValue}
+                  onChange={(n) => setWeight(String(n))}
+                  suffix="kg"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-stone-600 dark:text-slate-400 uppercase tracking-wider mb-2 text-center">
+                {t('section_height')}
+              </label>
+              <div className="rounded-2xl" style={{ background: 'var(--color-input-bg)' }}>
+                <WheelPicker
+                  min={HEIGHT_MIN}
+                  max={HEIGHT_MAX}
+                  value={heightValue}
+                  onChange={(n) => setHeight(String(n))}
+                  suffix="cm"
+                />
+              </div>
+            </div>
+          </div>
 
           <Section label={t('section_activity')}>
             <select

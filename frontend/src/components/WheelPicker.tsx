@@ -1,0 +1,180 @@
+import { useEffect, useRef, useState, useCallback } from 'react';
+
+interface WheelPickerProps {
+    min: number;
+    max: number;
+    value: number;
+    onChange: (value: number) => void;
+    suffix?: string;
+    step?: number;
+}
+
+const ITEM_HEIGHT = 44;
+const VISIBLE_ITEMS = 5; // markaz + 2 yuqori + 2 pastki
+const CENTER_OFFSET = Math.floor(VISIBLE_ITEMS / 2);
+
+export default function WheelPicker({
+    min,
+    max,
+    value,
+    onChange,
+    suffix = '',
+    step = 1,
+}: WheelPickerProps) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const scrollTimeoutRef = useRef<number | null>(null);
+    const isScrollingRef = useRef(false);
+    const [activeValue, setActiveValue] = useState(value);
+
+    const items: number[] = [];
+    for (let i = min; i <= max; i += step) items.push(i);
+
+    // value tashqaridan o'zgarsa — scroll pozitsiyani yangila
+    useEffect(() => {
+        if (!containerRef.current) return;
+        if (isScrollingRef.current) return;
+        const idx = items.indexOf(value);
+        if (idx === -1) return;
+        containerRef.current.scrollTop = idx * ITEM_HEIGHT;
+        setActiveValue(value);
+    }, [value, items]);
+
+    // Telegram haptic
+    const triggerHaptic = useCallback(() => {
+        try {
+            // @ts-ignore
+            const tg = window.Telegram?.WebApp;
+            tg?.HapticFeedback?.selectionChanged?.();
+        } catch { }
+    }, []);
+
+    const handleScroll = useCallback(() => {
+        if (!containerRef.current) return;
+        isScrollingRef.current = true;
+
+        const scrollTop = containerRef.current.scrollTop;
+        const idx = Math.round(scrollTop / ITEM_HEIGHT);
+        const clampedIdx = Math.max(0, Math.min(items.length - 1, idx));
+        const newValue = items[clampedIdx];
+
+        if (newValue !== activeValue) {
+            setActiveValue(newValue);
+            triggerHaptic();
+        }
+
+        if (scrollTimeoutRef.current) {
+            window.clearTimeout(scrollTimeoutRef.current);
+        }
+        scrollTimeoutRef.current = window.setTimeout(() => {
+            if (!containerRef.current) return;
+            const finalIdx = Math.round(containerRef.current.scrollTop / ITEM_HEIGHT);
+            const finalClamped = Math.max(0, Math.min(items.length - 1, finalIdx));
+            const finalValue = items[finalClamped];
+            containerRef.current.scrollTo({
+                top: finalClamped * ITEM_HEIGHT,
+                behavior: 'smooth',
+            });
+            isScrollingRef.current = false;
+            if (finalValue !== value) onChange(finalValue);
+        }, 120);
+    }, [activeValue, items, onChange, triggerHaptic, value]);
+
+    const handleItemClick = (idx: number) => {
+        if (!containerRef.current) return;
+        containerRef.current.scrollTo({
+            top: idx * ITEM_HEIGHT,
+            behavior: 'smooth',
+        });
+    };
+
+    const containerHeight = ITEM_HEIGHT * VISIBLE_ITEMS;
+    const padding = ITEM_HEIGHT * CENTER_OFFSET;
+
+    return (
+        <div
+            className="relative w-full select-none"
+            style={{ height: containerHeight }}
+        >
+            {/* Markaziy chiziqlar */}
+            <div
+                className="pointer-events-none absolute inset-x-0 z-10 border-y border-[#1D9E75]/30"
+                style={{
+                    top: padding,
+                    height: ITEM_HEIGHT,
+                }}
+            />
+
+            {/* Yuqori va pastki fade */}
+            <div
+                className="pointer-events-none absolute inset-x-0 top-0 z-20"
+                style={{
+                    height: padding,
+                    background:
+                        'linear-gradient(to bottom, var(--color-bg, #fff) 0%, transparent 100%)',
+                }}
+            />
+            <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 z-20"
+                style={{
+                    height: padding,
+                    background:
+                        'linear-gradient(to top, var(--color-bg, #fff) 0%, transparent 100%)',
+                }}
+            />
+
+            {/* Scroll container */}
+            <div
+                ref={containerRef}
+                onScroll={handleScroll}
+                className="h-full overflow-y-scroll scrollbar-hide"
+                style={{
+                    scrollSnapType: 'y mandatory',
+                    WebkitOverflowScrolling: 'touch',
+                }}
+            >
+                <div style={{ paddingTop: padding, paddingBottom: padding }}>
+                    {items.map((item, idx) => {
+                        const isActive = item === activeValue;
+                        const distance = Math.abs(item - activeValue);
+                        const opacity = isActive ? 1 : Math.max(0.3, 1 - distance * 0.25);
+                        const scale = isActive ? 1 : Math.max(0.85, 1 - distance * 0.05);
+
+                        return (
+                            <div
+                                key={item}
+                                onClick={() => handleItemClick(idx)}
+                                className="flex items-center justify-center cursor-pointer transition-all"
+                                style={{
+                                    height: ITEM_HEIGHT,
+                                    scrollSnapAlign: 'center',
+                                    scrollSnapStop: 'always',
+                                    opacity,
+                                    transform: `scale(${scale})`,
+                                }}
+                            >
+                                <span
+                                    className={`text-2xl font-semibold tabular-nums ${isActive
+                                            ? 'text-[#1D9E75] dark:text-[#22b886]'
+                                            : 'text-stone-700 dark:text-stone-300'
+                                        }`}
+                                >
+                                    {item}
+                                    {suffix && (
+                                        <span className="ml-1 text-base font-normal text-stone-500 dark:text-stone-400">
+                                            {suffix}
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            <style>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
+        </div>
+    );
+}

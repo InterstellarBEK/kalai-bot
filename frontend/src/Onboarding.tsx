@@ -3,56 +3,48 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from './supabase'
 import { getTelegramId, getTelegramFirstName } from './telegram'
 import Bekjon from './components/Bekjon'
+import WheelPicker from './components/WheelPicker'
 import { useTranslation } from './i18n'
 
 interface Props { onComplete: () => void }
 
 const FONT = '"Plus Jakarta Sans", system-ui, sans-serif'
 
-// Yosh chegaralari
 const AGE_MIN = 13
 const AGE_MAX = 100
 const AGE_DEFAULT = 19
 
-// Vazn/bo'y chegaralari (validation uchun)
 const WEIGHT_MIN = 30
 const WEIGHT_MAX = 300
+const WEIGHT_DEFAULT = 70
+
 const HEIGHT_MIN = 100
 const HEIGHT_MAX = 250
+const HEIGHT_DEFAULT = 170
 
 export default function Onboarding({ onComplete }: Props) {
     const { t } = useTranslation()
     const [step, setStep] = useState(0)
     const [gender, setGender] = useState<'male' | 'female'>('male')
     const [age, setAge] = useState<number>(AGE_DEFAULT)
-    const [weight, setWeight] = useState('')
-    const [height, setHeight] = useState('')
+    const [weight, setWeight] = useState<number>(WEIGHT_DEFAULT)
+    const [height, setHeight] = useState<number>(HEIGHT_DEFAULT)
     const [activity, setActivity] = useState('1.375')
     const [goal, setGoal] = useState<'lose' | 'maintain' | 'gain'>('maintain')
     const [saving, setSaving] = useState(false)
 
     const firstName = getTelegramFirstName() || t('onb_default_name')
 
-    // Vazn/bo'y validation
-    const weightValid = (() => {
-        const n = parseFloat(weight)
-        return !isNaN(n) && n >= WEIGHT_MIN && n <= WEIGHT_MAX
-    })()
-    const heightValid = (() => {
-        const n = parseFloat(height)
-        return !isNaN(n) && n >= HEIGHT_MIN && n <= HEIGHT_MAX
-    })()
-
     const canNext =
         step === 0 ? true :
             step === 1 ? age >= AGE_MIN && age <= AGE_MAX :
-                step === 2 ? weightValid && heightValid :
+                step === 2 ? (weight >= WEIGHT_MIN && weight <= WEIGHT_MAX && height >= HEIGHT_MIN && height <= HEIGHT_MAX) :
                     true
 
     const finish = async () => {
         const a = age
-        const w = parseFloat(weight)
-        const h = parseFloat(height)
+        const w = weight
+        const h = height
 
         let bmr = 10 * w + 6.25 * h - 5 * a
         bmr += gender === 'male' ? 5 : -161
@@ -163,26 +155,36 @@ export default function Onboarding({ onComplete }: Props) {
                                     {t('onb_step2_sub')}
                                 </p>
                                 <div className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-5" style={{ boxShadow: '0 8px 24px -10px rgba(91, 106, 208, 0.12)' }}>
-                                    <Section label={t('section_weight')}>
-                                        <Input
-                                            value={weight}
-                                            onChange={setWeight}
-                                            placeholder="70"
-                                            min={WEIGHT_MIN}
-                                            max={WEIGHT_MAX}
-                                            suffix="kg"
-                                        />
-                                    </Section>
-                                    <Section label={t('section_height')}>
-                                        <Input
-                                            value={height}
-                                            onChange={setHeight}
-                                            placeholder="175"
-                                            min={HEIGHT_MIN}
-                                            max={HEIGHT_MAX}
-                                            suffix="cm"
-                                        />
-                                    </Section>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-stone-600 dark:text-slate-400 uppercase tracking-wider mb-2 text-center">
+                                                {t('section_weight')}
+                                            </label>
+                                            <div className="rounded-2xl" style={{ background: 'var(--color-input-bg)' }}>
+                                                <WheelPicker
+                                                    min={WEIGHT_MIN}
+                                                    max={WEIGHT_MAX}
+                                                    value={weight}
+                                                    onChange={setWeight}
+                                                    suffix="kg"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-stone-600 dark:text-slate-400 uppercase tracking-wider mb-2 text-center">
+                                                {t('section_height')}
+                                            </label>
+                                            <div className="rounded-2xl" style={{ background: 'var(--color-input-bg)' }}>
+                                                <WheelPicker
+                                                    min={HEIGHT_MIN}
+                                                    max={HEIGHT_MAX}
+                                                    value={height}
+                                                    onChange={setHeight}
+                                                    suffix="cm"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -291,7 +293,6 @@ function PillButton({ active, onClick, children }: { active: boolean; onClick: (
     )
 }
 
-/* ─────────── Yangi Age Stepper (− 19 +) ─────────── */
 function AgeStepper({
     value, onChange, min, max,
 }: { value: number; onChange: (n: number) => void; min: number; max: number }) {
@@ -359,52 +360,6 @@ function AgeStepper({
     )
 }
 
-function Input({
-    value, onChange, placeholder, min, max, suffix,
-}: {
-    value: string
-    onChange: (v: string) => void
-    placeholder: string
-    min?: number
-    max?: number
-    suffix?: string
-}) {
-    return (
-        <div className="relative">
-            <input
-                type="number"
-                inputMode="numeric"
-                value={value}
-                min={min}
-                max={max}
-                onChange={e => {
-                    // Bo'sh stringga ruxsat (kiritish jarayonida)
-                    if (e.target.value === '') { onChange(''); return }
-                    const n = parseFloat(e.target.value)
-                    if (isNaN(n)) return
-                    // Max chegara — clamp
-                    if (max !== undefined && n > max) { onChange(String(max)); return }
-                    onChange(e.target.value)
-                }}
-                placeholder={placeholder}
-                className="w-full rounded-2xl px-4 py-3.5 font-semibold text-sm focus:outline-none transition pr-12"
-                style={{ background: 'var(--color-input-bg)', color: 'var(--color-input-text)', border: '2px solid transparent' }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = '#5B6AD0')}
-                onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
-            />
-            {suffix && (
-                <span
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold pointer-events-none"
-                    style={{ color: 'var(--color-input-text)', opacity: 0.5 }}
-                >
-                    {suffix}
-                </span>
-            )}
-        </div>
-    )
-}
-
-/* ─────────── SVG ikonlar (lucide-style) ─────────── */
 function IconTrendingDown({ color }: { color: string }) {
     return (
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
