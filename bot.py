@@ -1306,13 +1306,15 @@ async def set_commands():
 
 async def main():
     await set_commands()
-    setup_admin(dp, db, ADMIN_TELEGRAM_IDS)   # ← shu qator yangi
+    setup_admin(dp, db, ADMIN_TELEGRAM_IDS)
     setup_support(dp)
     await start_web()
     asyncio.create_task(daily_reminder_loop())
     asyncio.create_task(weekly_report_loop())
     asyncio.create_task(trial_notifications_loop(bot, db, WEBAPP_URL))
-    await dp.start_polling(bot)
+    # Eski webhook va pending update'larni tozalash — Render restart conflict'ini oldini oladi
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot, drop_pending_updates=True, allowed_updates=dp.resolve_used_update_types())
 
 
 # ============ Telegram Stars payments ============
