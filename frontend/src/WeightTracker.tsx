@@ -11,6 +11,79 @@ import { useTranslation } from "./i18n";
 
 const SPRING = { type: "spring" as const, stiffness: 280, damping: 26 };
 
+// ── Iconly-style SVG icons ────────────────────────────────
+function WIcon({
+    name,
+    size = 18,
+    color = 'currentColor',
+    fill = 'none',
+    strokeWidth = 2,
+}: {
+    name: 'target' | 'close' | 'undo' | 'plus' | 'arrowDown' | 'arrowUp' | 'arrowRight';
+    size?: number;
+    color?: string;
+    fill?: string;
+    strokeWidth?: number;
+}) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    };
+    switch (name) {
+        case 'target':
+            return (
+                <svg {...common}>
+                    <circle cx="12" cy="12" r="9" fill={fill} />
+                    <circle cx="12" cy="12" r="5.5" />
+                    <circle cx="12" cy="12" r="2" fill={color} stroke="none" />
+                </svg>
+            );
+        case 'close':
+            return (
+                <svg {...common}>
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            );
+        case 'undo':
+            return (
+                <svg {...common}>
+                    <path d="M4 10h11a4.5 4.5 0 010 9H10" />
+                    <path d="M8 6L4 10l4 4" />
+                </svg>
+            );
+        case 'plus':
+            return (
+                <svg {...common}>
+                    <path d="M12 5v14M5 12h14" />
+                </svg>
+            );
+        case 'arrowDown':
+            return (
+                <svg {...common}>
+                    <path d="M12 5v14M6 13l6 6 6-6" />
+                </svg>
+            );
+        case 'arrowUp':
+            return (
+                <svg {...common}>
+                    <path d="M12 19V5M6 11l6-6 6 6" />
+                </svg>
+            );
+        case 'arrowRight':
+            return (
+                <svg {...common}>
+                    <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+            );
+    }
+}
+
 export function WeightTracker() {
     const { t } = useTranslation();
     const [history, setHistory] = useState<WeightEntry[]>([]);
@@ -78,9 +151,9 @@ export function WeightTracker() {
     }
 
     const HEALTH_STYLES = {
-        good: { bg: "bg-green-50", text: "text-green-700", label: t('weight_health_good') },
-        warning: { bg: "bg-yellow-50", text: "text-yellow-700", label: t('weight_health_warning') },
-        danger: { bg: "bg-red-50", text: "text-red-700", label: t('weight_health_danger') },
+        good: { bg: "bg-green-50 dark:bg-green-900/20", text: "text-green-700 dark:text-green-300", label: t('weight_health_good') },
+        warning: { bg: "bg-yellow-50 dark:bg-yellow-900/20", text: "text-yellow-700 dark:text-yellow-300", label: t('weight_health_warning') },
+        danger: { bg: "bg-red-50 dark:bg-red-900/20", text: "text-red-700 dark:text-red-300", label: t('weight_health_danger') },
     };
 
     const current = history.length > 0 ? history[history.length - 1].weight_kg : null;
@@ -137,7 +210,7 @@ export function WeightTracker() {
                     </div>
                 </div>
                 {history.length > 1 && (
-                    <div className={`px-3 py-1.5 rounded-full text-xs font-bold ${delta < 0 ? "bg-green-50 text-green-700" : delta > 0 ? "bg-orange-50 text-orange-700" : "bg-gray-100 text-gray-600"}`}>
+                    <div className={`px-3 py-1.5 rounded-full text-xs font-bold ${delta < 0 ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300" : delta > 0 ? "bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300" : "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300"}`}>
                         {delta > 0 ? "+" : ""}{delta.toFixed(1)} kg
                     </div>
                 )}
@@ -209,15 +282,19 @@ export function WeightTracker() {
             {/* Trend badges */}
             {trend && health && (
                 <div className="mb-4 flex flex-wrap gap-2">
-                    <div className={`px-3 py-1.5 rounded-full text-xs font-bold ${health.bg} ${health.text}`}>
-                        {trend.direction === "down" ? "↓" : trend.direction === "up" ? "↑" : "→"}{" "}
-                        {Math.abs(trend.weeklyRateKg).toFixed(2)} {t('weight_per_week')}
+                    <div className={`px-3 py-1.5 rounded-full text-xs font-bold ${health.bg} ${health.text} flex items-center gap-1.5`}>
+                        <WIcon
+                            name={trend.direction === 'down' ? 'arrowDown' : trend.direction === 'up' ? 'arrowUp' : 'arrowRight'}
+                            size={12}
+                            strokeWidth={2.5}
+                        />
+                        <span>{Math.abs(trend.weeklyRateKg).toFixed(2)} {t('weight_per_week')}</span>
                     </div>
                     <div className={`px-3 py-1.5 rounded-full text-xs font-medium ${health.bg} ${health.text}`}>
                         {health.label}
                     </div>
                     {trend.weeksToTarget !== null && (
-                        <div className="px-3 py-1.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
+                        <div className="px-3 py-1.5 rounded-full text-xs font-medium bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300">
                             ~{Math.ceil(trend.weeksToTarget)} {t('weight_weeks_left')}
                         </div>
                     )}
@@ -231,19 +308,20 @@ export function WeightTracker() {
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                         className="flex gap-2">
                         <motion.button whileTap={{ scale: 0.96 }} onClick={() => setMode("add")}
-                            className="flex-1 py-3 rounded-2xl font-semibold text-white text-sm"
+                            className="flex-1 py-3 rounded-2xl font-semibold text-white text-sm flex items-center justify-center gap-1.5"
                             style={{ background: "#5B6AD0" }}>
-                            {t('weight_add')}
+                            <WIcon name="plus" size={16} strokeWidth={2.4} />
+                            <span>{t('weight_add')}</span>
                         </motion.button>
                         <motion.button whileTap={{ scale: 0.96 }}
                             onClick={() => { setMode("target"); setTargetInput(target?.toString() ?? ""); }}
-                            className="px-4 py-3 rounded-2xl font-semibold text-sm text-gray-600 dark:text-slate-300 bg-[#F5F6FB] dark:bg-[#252D38]">
-                            🎯
+                            className="px-4 py-3 rounded-2xl text-gray-600 dark:text-slate-300 bg-[#F5F6FB] dark:bg-[#252D38] flex items-center justify-center">
+                            <WIcon name="target" size={18} color="#5B6AD0" fill="rgba(91, 106, 208, 0.15)" strokeWidth={2} />
                         </motion.button>
                         {history.length > 0 && (
                             <motion.button whileTap={{ scale: 0.96 }} onClick={handleUndo} disabled={loading}
-                                className="px-4 py-3 rounded-2xl font-semibold text-sm text-gray-600 dark:text-slate-300 bg-[#F5F6FB] dark:bg-[#252D38]">
-                                ↶
+                                className="px-4 py-3 rounded-2xl text-gray-600 dark:text-slate-300 bg-[#F5F6FB] dark:bg-[#252D38] flex items-center justify-center">
+                                <WIcon name="undo" size={16} strokeWidth={2.2} />
                             </motion.button>
                         )}
                     </motion.div>
@@ -263,8 +341,8 @@ export function WeightTracker() {
                         </motion.button>
                         <motion.button whileTap={{ scale: 0.96 }}
                             onClick={() => { setMode("idle"); setInput(""); }}
-                            className="px-3 py-3 rounded-2xl text-sm text-gray-500 dark:text-slate-400 bg-[#F5F6FB] dark:bg-[#252D38]">
-                            ✕
+                            className="px-3 py-3 rounded-2xl text-gray-500 dark:text-slate-400 bg-[#F5F6FB] dark:bg-[#252D38] flex items-center justify-center">
+                            <WIcon name="close" size={16} strokeWidth={2.2} />
                         </motion.button>
                     </motion.div>
                 )}
@@ -285,8 +363,8 @@ export function WeightTracker() {
                             </motion.button>
                             <motion.button whileTap={{ scale: 0.96 }}
                                 onClick={() => { setMode("idle"); setTargetInput(""); }}
-                                className="px-3 py-3 rounded-2xl text-sm text-gray-500 dark:text-slate-400 bg-[#F5F6FB] dark:bg-[#252D38]">
-                                ✕
+                                className="px-3 py-3 rounded-2xl text-gray-500 dark:text-slate-400 bg-[#F5F6FB] dark:bg-[#252D38] flex items-center justify-center">
+                                <WIcon name="close" size={16} strokeWidth={2.2} />
                             </motion.button>
                         </div>
                     </motion.div>
