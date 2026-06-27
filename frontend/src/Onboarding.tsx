@@ -139,7 +139,15 @@ export default function Onboarding({ onComplete }: Props) {
                                         </div>
                                     </Section>
                                     <Section label={t('section_age')}>
-                                        <AgeStepper value={age} onChange={setAge} min={AGE_MIN} max={AGE_MAX} />
+                                        <div className="rounded-2xl" style={{ background: 'var(--color-input-bg)' }}>
+                                            <WheelPicker
+                                                min={AGE_MIN}
+                                                max={AGE_MAX}
+                                                value={age}
+                                                onChange={setAge}
+                                                step={1}
+                                            />
+                                        </div>
                                     </Section>
                                 </div>
                             </div>
@@ -292,74 +300,6 @@ function PillButton({ active, onClick, children }: { active: boolean; onClick: (
         </motion.button>
     )
 }
-
-function AgeStepper({
-    value, onChange, min, max,
-}: { value: number; onChange: (n: number) => void; min: number; max: number }) {
-    const [editing, setEditing] = useState(false)
-    const [draft, setDraft] = useState(String(value))
-
-    const dec = () => onChange(Math.max(min, value - 1))
-    const inc = () => onChange(Math.min(max, value + 1))
-
-    const commit = () => {
-        const n = parseInt(draft, 10)
-        if (!isNaN(n)) onChange(Math.max(min, Math.min(max, n)))
-        setEditing(false)
-    }
-
-    return (
-        <div
-            className="flex items-center justify-between rounded-2xl px-2 py-2"
-            style={{ background: 'var(--color-input-bg)' }}
-        >
-            <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={dec}
-                disabled={value <= min}
-                className="w-11 h-11 rounded-xl flex items-center justify-center font-extrabold text-2xl disabled:opacity-30"
-                style={{ background: '#5B6AD0', color: '#fff' }}
-                aria-label="minus"
-            >
-                −
-            </motion.button>
-
-            {editing ? (
-                <input
-                    type="number"
-                    autoFocus
-                    inputMode="numeric"
-                    value={draft}
-                    onChange={e => setDraft(e.target.value)}
-                    onBlur={commit}
-                    onKeyDown={e => { if (e.key === 'Enter') commit() }}
-                    className="flex-1 mx-2 text-center text-2xl font-extrabold bg-transparent outline-none"
-                    style={{ color: 'var(--color-input-text)' }}
-                />
-            ) : (
-                <button
-                    onClick={() => { setDraft(String(value)); setEditing(true) }}
-                    className="flex-1 mx-2 text-center text-2xl font-extrabold tabular-nums"
-                    style={{ color: 'var(--color-input-text)' }}
-                >
-                    {value}
-                </button>
-            )}
-
-            <motion.button
-                whileTap={{ scale: 0.9 }}
-                onClick={inc}
-                disabled={value >= max}
-                className="w-11 h-11 rounded-xl flex items-center justify-center font-extrabold text-2xl disabled:opacity-30"
-                style={{ background: '#5B6AD0', color: '#fff' }}
-                aria-label="plus"
-            >
-                +
-            </motion.button>
-        </div>
-    )
-}
-
 function IconTrendingDown({ color }: { color: string }) {
     return (
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
