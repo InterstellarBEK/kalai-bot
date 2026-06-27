@@ -1312,9 +1312,24 @@ async def main():
     asyncio.create_task(daily_reminder_loop())
     asyncio.create_task(weekly_report_loop())
     asyncio.create_task(trial_notifications_loop(bot, db, WEBAPP_URL))
-    # Eski webhook va pending update'larni tozalash — Render restart conflict'ini oldini oladi
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot, drop_pending_updates=True, allowed_updates=dp.resolve_used_update_types())
+
+    # Eski Telegram session o'chguncha kutish (Render restart conflict)
+    for attempt in range(10):
+        try:
+            await bot.delete_webhook(drop_pending_updates=True)
+            me = await bot.get_me()
+            print(f"[Bot] @{me.username} ishga tushdi (urinish {attempt+1})")
+            break
+        except Exception as e:
+            print(f"[Bot] Startup urinishi {attempt+1}/10 xato: {e}")
+            await asyncio.sleep(5)
+
+    await dp.start_polling(
+        bot,
+        drop_pending_updates=True,
+        allowed_updates=dp.resolve_used_update_types(),
+        handle_signals=False,
+    )
 
 
 # ============ Telegram Stars payments ============
