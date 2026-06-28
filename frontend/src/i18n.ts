@@ -432,6 +432,7 @@ const translations: Record<Lang, Record<string, string>> = {
         // Sevimlilar + Quick Add
         quick_add_title: 'Tezkor qo\'shish',
         quick_add_empty: 'Hali sevimli taom yo\'q',
+        quick_add_count_suffix: 'sevimli',
         portion_label: 'Porsiya (g)',
         portion_grams: 'g',
         meal_type_label: 'Qaysi ovqat?',
@@ -850,6 +851,7 @@ const translations: Record<Lang, Record<string, string>> = {
         // Севимлилар + Тезкор қўшиш
         quick_add_title: 'Тезкор қўшиш',
         quick_add_empty: 'Ҳали севимли таом йўқ',
+        quick_add_count_suffix: 'севимли',
         portion_label: 'Порция (г)',
         portion_grams: 'г',
         meal_type_label: 'Қайси овқат?',
@@ -1268,6 +1270,7 @@ const translations: Record<Lang, Record<string, string>> = {
         // Избранное + Быстрое добавление
         quick_add_title: 'Быстрое добавление',
         quick_add_empty: 'Любимых блюд пока нет',
+        quick_add_count_suffix: 'избр.',
         portion_label: 'Порция (г)',
         portion_grams: 'г',
         meal_type_label: 'Какой прием пищи?',
@@ -1686,6 +1689,7 @@ const translations: Record<Lang, Record<string, string>> = {
         // Favorites + Quick Add
         quick_add_title: 'Quick Add',
         quick_add_empty: 'No favorites yet',
+        quick_add_count_suffix: 'fav.',
         portion_label: 'Portion (g)',
         portion_grams: 'g',
         meal_type_label: 'Which meal?',
