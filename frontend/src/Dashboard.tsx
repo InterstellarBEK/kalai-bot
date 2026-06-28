@@ -13,6 +13,7 @@ import { FastingTracker } from './FastingTracker';
 import { AchievementsScreen } from './AchievementsScreen';
 import { checkAndUnlock } from './achievements';
 import { useTranslation } from './i18n';
+import QuickAddCard from './QuickAddCard';
 
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
 const EASE_BACK = [0.34, 1.56, 0.64, 1] as const;
@@ -327,7 +328,7 @@ export default function Dashboard() {
                         initial={{ opacity: 0, scale: 0.96, y: 10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         transition={{ ...SPRING, delay: 0.05 }}
-                        className="bg-white dark:bg-[#1E252E] dark:bg-[#1E252E] rounded-[1.75rem] p-5"
+                        className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-5"
                         style={{ boxShadow: '0 8px 24px -10px rgba(91,106,208,0.12)' }}
                     >
                         <div className="flex items-center gap-4">
@@ -358,7 +359,7 @@ export default function Dashboard() {
                                     {Math.round(total.calories)}
                                 </div>
                                 <div className="text-xs text-stone-400 dark:text-slate-500 font-semibold mt-1">/ {target} kcal</div>
-                                <div className="text-[13px] text-stone-600 dark:text-slate-300 font-mediummt-3 leading-snug">
+                                <div className="text-[13px] text-stone-600 dark:text-slate-300 font-medium mt-3 leading-snug">
                                     {bekjonMessage}
                                 </div>
                                 {remaining > 0 && (
@@ -386,7 +387,7 @@ export default function Dashboard() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.12 }}
-                        className="text-[15px] font-extrabold text-stone-800 dark:text-slate-200 dark:text-slate-200  dark:text-slate-200  mt-6 mb-3 px-1"
+                        className="text-[15px] font-extrabold text-stone-800 dark:text-slate-200 mt-6 mb-3 px-1"
                     >
                         {t('today_balance')}
                     </motion.div>
@@ -419,6 +420,16 @@ export default function Dashboard() {
                             <FastingTracker telegramId={telegramId} />
                         </div>
                     )}
+                    {/* Quick Add / Sevimlilar */}
+                    <QuickAddCard onLogged={loadToday} />
+
+                    {/* Today's foods */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ ...SPRING, delay: 0.30 }}
+                        className="mt-6"
+                    ></motion.div>
 
                     {/* Today's foods */}
                     <motion.div
@@ -428,14 +439,14 @@ export default function Dashboard() {
                         className="mt-6"
                     >
                         <div className="flex items-center justify-between mb-3 px-1">
-                            <h3 className="text-[15px] font-extrabold text-stone-800 dark:text-slate-200 dark:text-slate-200  dark:text-slate-200 ">{t('today_meals')}</h3>
+                            <h3 className="text-[15px] font-extrabold text-stone-800 dark:text-slate-200">{t('today_meals')}</h3>
                             <span className="text-xs text-stone-500 dark:text-slate-400 font-bold">
                                 {logs.length} {t('logs_count_suffix')}
                             </span>
                         </div>
 
                         {logs.length === 0 ? (
-                            <div className="bg-white dark:bg-[#1E252E] dark:bg-[#1E252E] rounded-2xl p-8 text-center">
+                            <div className="bg-white dark:bg-[#1E252E] rounded-2xl p-8 text-center">
                                 <div className="flex justify-center mb-2 text-stone-400 dark:text-slate-500">
                                     <DIcon name="utensils" size={32} />
                                 </div>
@@ -449,7 +460,7 @@ export default function Dashboard() {
                                         initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
                                         transition={{ ...SPRING, delay: 0.32 + idx * 0.05 }}
-                                        className="bg-white dark:bg-[#1E252E] dark:bg-[#1E252E] rounded-2xl p-3.5 flex items-center justify-between"
+                                        className="bg-white dark:bg-[#1E252E] rounded-2xl p-3.5 flex items-center justify-between"
                                     >
                                         <div className="flex items-center gap-3 flex-1 min-w-0">
                                             <div
@@ -489,29 +500,34 @@ export default function Dashboard() {
                             loadUser();
                         }}
                     />
-                )}<AnimatePresence>
-                    {showAchievements && (
-                        <motion.div
-                            initial={{ opacity: 0, x: '100%' }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: '100%' }}
-                            transition={SPRING}
-                            className="fixed inset-0 z-50 bg-[#ECEEF5] dark:bg-[#0F1419] overflow-y-auto"
-                        >
-                            <AchievementsScreen onBack={() => setShowAchievements(false)} />
-                        </motion.div>
-                    )}
-                    {newAch && (
-                        <motion.div
-                            initial={{ opacity: 0, y: -30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -30 }}
-                            className="fixed top-5 left-1/2 -translate-x-1/2 bg-[#5B6AD0] text-white px-5 py-3 rounded-2xl font-bold z-[60] shadow-lg"
-                        >
-                            {newAch}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {showAchievements && (
+                    <motion.div
+                        initial={{ opacity: 0, x: '100%' }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: '100%' }}
+                        transition={SPRING}
+                        className="fixed inset-0 z-50 bg-[#ECEEF5] dark:bg-[#0F1419] overflow-y-auto"
+                    >
+                        <AchievementsScreen onBack={() => setShowAchievements(false)} />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {newAch && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -30 }}
+                        className="fixed top-5 left-1/2 -translate-x-1/2 bg-[#5B6AD0] text-white px-5 py-3 rounded-2xl font-bold z-[60] shadow-lg"
+                    >
+                        {newAch}
+                    </motion.div>
+                )}
             </AnimatePresence>
         </>
     );

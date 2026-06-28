@@ -8,6 +8,7 @@ import { useTranslation } from '../i18n';
 import BarcodeScanner from '../BarcodeScanner';
 import CameraCapture from "../components/CameraCapture";
 import { lookupBarcode, saveUserProduct, type OFFProduct } from '../openfoodfacts';
+import { upsertFavorite } from '../lib/favorites';
 import BarcodeApproveModal from '../components/BarcodeApproveModal';
 import BarcodeManualEntryModal, { type ManualProductInput } from '../components/BarcodeManualEntryModal';
 import { uzLatinToCyrl } from '../transliterate';
@@ -135,6 +136,20 @@ export default function Scanner() {
             });
             if (error) throw error;
             await addCoinsForLog();
+
+            // Sevimlilarga avtomatik qo'shish
+            await upsertFavorite({
+                telegramId,
+                foodName: fullName,
+                kcalPer100g: pendingProduct.kcal_per_100g,
+                proteinPer100g: pendingProduct.protein_per_100g,
+                fatPer100g: pendingProduct.fat_per_100g,
+                carbsPer100g: pendingProduct.carbs_per_100g,
+                source: 'barcode',
+                sourceId: pendingProduct.barcode ?? null,
+                emoji: null,
+            });
+
             setPendingProduct(null);
             setSaved(true);
             setTimeout(() => setSaved(false), 2200);
@@ -175,6 +190,20 @@ export default function Scanner() {
             });
             if (error) throw error;
             await addCoinsForLog();
+
+            // Sevimlilarga avtomatik qo'shish
+            await upsertFavorite({
+                telegramId,
+                foodName: fullName,
+                kcalPer100g: input.kcal,
+                proteinPer100g: input.protein,
+                fatPer100g: input.fat,
+                carbsPer100g: input.carbs,
+                source: 'barcode',
+                sourceId: unknownBarcode,
+                emoji: null,
+            });
+
             setUnknownBarcode(null);
             setPrefill(null);
             setSaved(true);
@@ -214,6 +243,22 @@ export default function Scanner() {
             if (error) throw error;
 
             await addCoinsForLog();
+
+            // Sevimlilarga avtomatik qo'shish (AI tahlil natijasi)
+            if (result.portion_g > 0) {
+                const per100Ratio = 100 / result.portion_g;
+                await upsertFavorite({
+                    telegramId,
+                    foodName: capitalizedName,
+                    kcalPer100g: Math.round(result.calories * per100Ratio),
+                    proteinPer100g: +(result.protein * per100Ratio).toFixed(1),
+                    fatPer100g: +(result.fat * per100Ratio).toFixed(1),
+                    carbsPer100g: +(result.carbs * per100Ratio).toFixed(1),
+                    source: 'ai',
+                    sourceId: null,
+                    emoji: null,
+                });
+            }
 
             setSaved(true);
             setTimeout(() => handleReset(), 2200);
