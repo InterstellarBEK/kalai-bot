@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactElement } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from './supabase'
 import FoodSearch from './FoodSearch'
@@ -233,12 +233,60 @@ function App() {
 function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const { t } = useTranslation()
 
-  const items: { id: Tab; icon: string; label: string }[] = [
-    { id: 'today', icon: '📊', label: t('nav_today') },
-    { id: 'scanner', icon: '📷', label: t('nav_scanner') },
-    { id: 'foods', icon: '🍽️', label: t('nav_foods') },
-    { id: 'ramadan', icon: '🌙', label: t('nav_ramadan') },
-    { id: 'profile', icon: '👤', label: t('nav_profile') },
+  const iconProps = {
+    width: 22,
+    height: 22,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  }
+
+  const icons: Record<Tab, ReactElement> = {
+    today: (
+      <svg {...iconProps}>
+        <path d="M3 12L12 4l9 8" />
+        <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" />
+      </svg>
+    ),
+    scanner: (
+      <svg {...iconProps}>
+        <path d="M4 9V7a2 2 0 0 1 2-2h2" />
+        <path d="M16 5h2a2 2 0 0 1 2 2v2" />
+        <path d="M20 15v2a2 2 0 0 1-2 2h-2" />
+        <path d="M8 19H6a2 2 0 0 1-2-2v-2" />
+        <circle cx="12" cy="12" r="3.5" />
+      </svg>
+    ),
+    foods: (
+      <svg {...iconProps}>
+        <path d="M7 3v8a2 2 0 0 0 2 2v8" />
+        <path d="M11 3v8" />
+        <path d="M9 3v6" />
+        <path d="M17 3c-1.5 0-3 2-3 5s1.5 4 3 4v9" />
+      </svg>
+    ),
+    ramadan: (
+      <svg {...iconProps}>
+        <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
+      </svg>
+    ),
+    profile: (
+      <svg {...iconProps}>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+      </svg>
+    ),
+  }
+
+  const items: { id: Tab; label: string }[] = [
+    { id: 'today', label: t('nav_today') },
+    { id: 'scanner', label: t('nav_scanner') },
+    { id: 'foods', label: t('nav_foods') },
+    { id: 'ramadan', label: t('nav_ramadan') },
+    { id: 'profile', label: t('nav_profile') },
   ]
 
   return (
@@ -269,7 +317,7 @@ function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
                   className="relative z-10 flex items-center gap-1.5"
                   style={{ color: active ? '#fff' : 'var(--color-nav-inactive)' }}
                 >
-                  <span className="text-lg">{item.icon}</span>
+                  {icons[item.id]}
                   {active && (
                     <motion.span
                       initial={{ opacity: 0, width: 0 }}
@@ -322,8 +370,8 @@ function ProfileForm(props: any) {
           transition={SPRING}
           className="mb-5"
         >
-          <h1 className="text-[22px] font-extrabold text-stone-900 dark:text-slate-1000 leading-tight">{t('profile_title')}</h1>
-          <p className="text-[13px]text-stone-500 dark:text-slate-400 dark:text-slate-400 dark:text-slate-400 font-medium mt-0.5">{t('profile_subtitle')}</p>
+          <h1 className="text-[22px] font-extrabold text-stone-900 dark:text-slate-100 leading-tight">{t('profile_title')}</h1>
+          <p className="text-[13px] text-stone-500 dark:text-slate-400 font-medium mt-0.5">{t('profile_subtitle')}</p>
         </motion.div>
 
         {/* --- Premium tugmasi --- */}
@@ -357,7 +405,7 @@ function ProfileForm(props: any) {
           className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-4 mb-3"
           style={{ boxShadow: '0 8px 24px -10px rgba(91, 106, 208, 0.12)' }}
         >
-          <p className="text-xs font-boldtext-stone-500 dark:text-slate-400 dark:text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-3">
+          <p className="text-xs font-bold text-stone-500 dark:text-slate-400 uppercase tracking-wider mb-3">
             {t('lang_section')}
           </p>
           <div className="grid grid-cols-2 gap-2">
@@ -551,7 +599,7 @@ function ProfileForm(props: any) {
             className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-5 text-center"
             style={{ boxShadow: '0 8px 24px -10px rgba(91, 106, 208, 0.18)' }}
           >
-            <div className="text-xs font-boldtext-stone-500 dark:text-slate-400 dark:text-slate-400 dark:text-slate-400 uppercase tracking-wider">{t('result_title')}</div>
+            <div className="text-xs font-bold text-stone-500 dark:text-slate-400 uppercase tracking-wider">{t('result_title')}</div>
             <div className="text-[44px] font-extrabold mt-1 leading-none" style={{ color: '#5B6AD0' }}>
               {result}
               <span className="text-base text-stone-400 dark:text-slate-500 font-bold ml-1">kcal</span>
@@ -572,7 +620,7 @@ function ProfileForm(props: any) {
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-3">
-      <label className="block text-xs font-boldtext-stone-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">{label}</label>
+      <label className="block text-xs font-bold text-stone-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">{label}</label>
       {children}
     </div>
   )

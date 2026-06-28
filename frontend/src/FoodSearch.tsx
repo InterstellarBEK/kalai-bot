@@ -6,6 +6,7 @@ import { addCoinsForLog, COINS_PER_LOG } from './coins';
 import Bekjon from './components/Bekjon';
 import { useTranslation } from './i18n';
 import { uzLatinToCyrl } from './transliterate';
+import type { ReactElement } from 'react';
 
 
 const DEFAULT_PORTIONS = [50, 100, 150, 200, 300];
@@ -40,6 +41,171 @@ interface LocalFoodRow {
     fat_per_100g: number;
     portions: Portion[];
     emoji: string;
+}
+// ===== Premium taom ikonlari (emoji'ga moslashtirilgan) =====
+function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
+    if (!emoji) return null;
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        strokeWidth: 1.7,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    };
+    // Emoji → SVG mapping
+    const map: Record<string, ReactElement> = {
+        // 🍲 Osh / shurva / lag'mon — likobcha
+        '🍲': (
+            <svg {...common}>
+                <ellipse cx="12" cy="11" rx="9" ry="2.2" fill="#F59E0B" fillOpacity="0.25" stroke="#F59E0B" />
+                <path d="M3 11c0 4 4 8 9 8s9-4 9-8" stroke="#92400E" fill="#FCD34D" fillOpacity="0.4" />
+                <path d="M8 7c0-1 1-1.5 1-2.5M12 6.5c0-1 1-1.5 1-2.5M16 7c0-1 1-1.5 1-2.5" stroke="#92400E" />
+            </svg>
+        ),
+        // 🍗 Tandir kabob / tovuq — drumstick
+        '🍗': (
+            <svg {...common}>
+                <path d="M14.5 4.5a4 4 0 0 0-6.5 4.8L4 13.5a2 2 0 1 0 2.8 2.8l4.2-4.2a4 4 0 0 0 5-7.6z" fill="#F59E0B" fillOpacity="0.35" stroke="#9A3412" />
+                <path d="M5 14l-1 2M6 15l-2 1" stroke="#9A3412" />
+            </svg>
+        ),
+        // 🥟 Manti / chuchvara — dumpling
+        '🥟': (
+            <svg {...common}>
+                <path d="M4 14c0-4 3.5-7 8-7s8 3 8 7c0 .8-.4 1.5-1.2 1.5H5.2C4.4 15.5 4 14.8 4 14z" fill="#FEF3C7" stroke="#92400E" />
+                <path d="M7 12c.5-.5 1-.5 1.5 0M11 11.5c.5-.5 1-.5 1.5 0M15 12c.5-.5 1-.5 1.5 0" stroke="#92400E" />
+                <path d="M5 15.5h14l-1 2H6z" fill="#FCD34D" stroke="#92400E" />
+            </svg>
+        ),
+        // 🥘 Somsa / kuza / palov — pan
+        '🥘': (
+            <svg {...common}>
+                <path d="M3 11h18l-1 5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3l-1-5z" fill="#FCD34D" fillOpacity="0.5" stroke="#92400E" />
+                <circle cx="9" cy="14" r="1" fill="#9A3412" />
+                <circle cx="13" cy="13" r="1" fill="#9A3412" />
+                <circle cx="16" cy="15" r="1" fill="#9A3412" />
+                <path d="M3 11l-1.5-2M21 11l1.5-2" stroke="#92400E" />
+            </svg>
+        ),
+        // 🍞 Non — bread
+        '🍞': (
+            <svg {...common}>
+                <path d="M4 10c0-3 2-5 5-5h6c3 0 5 2 5 5v2H4v-2z" fill="#FCD34D" stroke="#92400E" />
+                <path d="M4 12h16v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5z" fill="#F59E0B" fillOpacity="0.4" stroke="#92400E" />
+                <path d="M8 8v3M12 7.5v3.5M16 8v3" stroke="#92400E" />
+            </svg>
+        ),
+        // 🍜 Lag'mon / noodles
+        '🍜': (
+            <svg {...common}>
+                <path d="M3 11h18a9 9 0 0 1-18 0z" fill="#FCD34D" fillOpacity="0.4" stroke="#92400E" />
+                <path d="M6 11c.5-2 1.5-3 2-2s-.5 2 0 3M11 11c.5-2 1.5-3 2-2s-.5 2 0 3M16 11c.5-2 1.5-3 2-2s-.5 2 0 3" stroke="#9A3412" />
+            </svg>
+        ),
+        // 🍚 Guruch — rice bowl
+        '🍚': (
+            <svg {...common}>
+                <path d="M3 11h18a9 9 0 0 1-18 0z" fill="#F1F5F9" stroke="#64748B" />
+                <circle cx="8" cy="13" r=".7" fill="#64748B" />
+                <circle cx="12" cy="14" r=".7" fill="#64748B" />
+                <circle cx="16" cy="13" r=".7" fill="#64748B" />
+                <circle cx="10" cy="15.5" r=".7" fill="#64748B" />
+                <circle cx="14" cy="15.5" r=".7" fill="#64748B" />
+            </svg>
+        ),
+        // ☕ Choy
+        '☕': (
+            <svg {...common}>
+                <path d="M4 8h13v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8z" fill="#FCD34D" fillOpacity="0.3" stroke="#92400E" />
+                <path d="M17 10h2a2 2 0 0 1 0 4h-2" stroke="#92400E" />
+                <path d="M8 5c0-1 1-1 1-2M11 5c0-1 1-1 1-2M14 5c0-1 1-1 1-2" stroke="#9A3412" />
+            </svg>
+        ),
+        // 🥗 Salat
+        '🥗': (
+            <svg {...common}>
+                <path d="M3 11h18a9 9 0 0 1-18 0z" fill="#86EFAC" fillOpacity="0.4" stroke="#15803D" />
+                <circle cx="8" cy="9" r="2" fill="#EF4444" fillOpacity="0.5" stroke="#991B1B" />
+                <circle cx="14" cy="8" r="1.5" fill="#FB923C" fillOpacity="0.6" stroke="#9A3412" />
+                <path d="M11 7c.5-1 1.5-1.5 2.5-1" stroke="#15803D" />
+            </svg>
+        ),
+        // 🥩 Go'sht
+        '🥩': (
+            <svg {...common}>
+                <path d="M5 9c1-3 4-5 7-5s6 2 7 5-1 7-4 9-8 1-9-1-2-5-1-8z" fill="#EF4444" fillOpacity="0.35" stroke="#991B1B" />
+                <path d="M9 9c1-1 3-2 5-1" stroke="#FCD34D" strokeWidth="2" />
+            </svg>
+        ),
+        // 🐟 Baliq
+        '🐟': (
+            <svg {...common}>
+                <path d="M3 12c0-3 4-6 9-6s8 3 8 6-3 6-8 6-9-3-9-6z" fill="#7DD3FC" fillOpacity="0.4" stroke="#0369A1" />
+                <path d="M20 12l3-3v6l-3-3z" fill="#7DD3FC" fillOpacity="0.4" stroke="#0369A1" />
+                <circle cx="7" cy="11" r=".8" fill="#0369A1" />
+            </svg>
+        ),
+        // 🥛 Sut
+        '🥛': (
+            <svg {...common}>
+                <path d="M7 4h10l-1 3H8L7 4z" fill="#F1F5F9" stroke="#64748B" />
+                <path d="M8 7h8l-.5 12a2 2 0 0 1-2 2H10.5a2 2 0 0 1-2-2L8 7z" fill="#F8FAFC" stroke="#64748B" />
+                <path d="M9 13h6" stroke="#64748B" />
+            </svg>
+        ),
+        // 🥚 Tuxum
+        '🥚': (
+            <svg {...common}>
+                <ellipse cx="12" cy="13" rx="6" ry="8" fill="#FEF3C7" stroke="#92400E" />
+            </svg>
+        ),
+        // 🍎 Olma
+        '🍎': (
+            <svg {...common}>
+                <path d="M12 6c-1-2-3-2.5-5-1.5s-2 4-1 7 4 7 6 7 5-4 6-7-1-6-3-7-2 .5-3 1.5z" fill="#EF4444" fillOpacity="0.45" stroke="#991B1B" />
+                <path d="M12 6V4c0-1 1-2 2-2" stroke="#15803D" />
+            </svg>
+        ),
+        // 🍌 Banan
+        '🍌': (
+            <svg {...common}>
+                <path d="M5 6c0 8 5 13 13 13 2 0 2-2 1-2-5 0-10-5-10-10 0-1.5-2-1.5-4-1z" fill="#FCD34D" fillOpacity="0.5" stroke="#92400E" />
+            </svg>
+        ),
+        // 🧀 Pishloq
+        '🧀': (
+            <svg {...common}>
+                <path d="M3 11l9-5 9 5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" fill="#FCD34D" fillOpacity="0.5" stroke="#92400E" />
+                <circle cx="8" cy="14" r=".8" fill="#92400E" />
+                <circle cx="13" cy="13" r=".8" fill="#92400E" />
+                <circle cx="16" cy="16" r=".8" fill="#92400E" />
+            </svg>
+        ),
+        // 🍅 Pomidor
+        '🍅': (
+            <svg {...common}>
+                <circle cx="12" cy="13" r="7" fill="#EF4444" fillOpacity="0.5" stroke="#991B1B" />
+                <path d="M9 6l1 2 2-1 2 1 1-2" fill="#15803D" stroke="#15803D" />
+            </svg>
+        ),
+        // 🥒 Bodring
+        '🥒': (
+            <svg {...common}>
+                <path d="M16 4c2 0 4 2 4 4s-8 12-12 12-4-2-4-4S14 4 16 4z" fill="#86EFAC" fillOpacity="0.5" stroke="#15803D" />
+            </svg>
+        ),
+    };
+    return (
+        map[emoji] || (
+            // Default — generic bowl
+            <svg {...common}>
+                <ellipse cx="12" cy="11" rx="9" ry="2" fill="#F59E0B" fillOpacity="0.2" stroke="#F59E0B" />
+                <path d="M3 11c0 4 4 8 9 8s9-4 9-8" fill="#FCD34D" fillOpacity="0.3" stroke="#92400E" />
+            </svg>
+        )
+    );
 }
 
 export default function FoodSearch() {
@@ -250,7 +416,11 @@ export default function FoodSearch() {
                             className="rounded-2xl p-4 mb-4 flex items-center gap-3"
                             style={{ background: '#E8F5E9' }}
                         >
-                            <div className="text-2xl">✅</div>
+                            <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-emerald-600">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                                </svg>
+                            </div>
                             <div className="flex-1 min-w-0">
                                 <div className="font-extrabold text-emerald-900 capitalize text-sm">
                                     {savedFood.name} {t('food_added_suffix')}
@@ -324,7 +494,7 @@ export default function FoodSearch() {
                                     <div className="flex justify-between items-start mb-3 gap-2">
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-1.5 flex-wrap">
-                                                {food.emoji && <span className="text-xl">{food.emoji}</span>}
+                                                {food.emoji && <FoodIcon emoji={food.emoji} size={22} />}
                                                 <h3 className="font-extrabold text-stone-900 dark:text-slate-100 capitalize text-[15px]">
                                                     {displayName(food, food.name_ru)}
                                                 </h3>

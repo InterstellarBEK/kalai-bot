@@ -54,20 +54,32 @@ export default function Onboarding({ onComplete }: Props) {
         const finalKcal = Math.round(tdee)
 
         setSaving(true)
-        const { error } = await supabase.from('users').upsert({
-            telegram_id: getTelegramId(),
-            age: a, weight_kg: w, height_cm: h,
-            gender, activity, goal,
-            daily_calories_goal: finalKcal,
-        }, { onConflict: 'telegram_id' })
-        await supabase.from('weight_logs').insert({
-            telegram_id: getTelegramId(),
-            weight_kg: w,
-        })
-        setSaving(false)
+        try {
+            const { error } = await supabase.from('users').upsert({
+                telegram_id: getTelegramId(),
+                age: a, weight_kg: w, height_cm: h,
+                gender, activity, goal,
+                daily_calories_goal: finalKcal,
+            }, { onConflict: 'telegram_id' })
 
-        if (error) { alert(t('error_prefix') + error.message); return }
-        onComplete()
+            if (error) {
+                alert('Upsert xato: ' + error.message)
+                setSaving(false)
+                return
+            }
+
+            const { error: wErr } = await supabase.from('weight_logs').insert({
+                telegram_id: getTelegramId(),
+                weight_kg: w,
+            })
+            if (wErr) console.warn('weight_logs error:', wErr.message)
+
+            setSaving(false)
+            onComplete()
+        } catch (e: any) {
+            alert('Exception: ' + (e?.message || String(e)))
+            setSaving(false)
+        }
     }
 
     const next = () => {

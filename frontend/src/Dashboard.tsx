@@ -17,6 +17,150 @@ import { useTranslation } from './i18n';
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
 const EASE_BACK = [0.34, 1.56, 0.64, 1] as const;
 
+// ===== Premium SVG ikonlar (Iconly uslubi) =====
+type IconName = 'coin' | 'flame' | 'trophy' | 'protein' | 'fat' | 'carbs' | 'utensils' | 'bowl';
+
+function DIcon({ name, size = 18, color = 'currentColor' }: { name: IconName; size?: number; color?: string }) {
+    const common = {
+        width: size,
+        height: size,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: color,
+        strokeWidth: 1.9,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const,
+    };
+    switch (name) {
+        case 'coin':
+            // Premium tanga: tashqi halqa + ichki kontur + $ belgi
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="9" fill={color} fillOpacity="0.18" />
+                    <circle cx="12" cy="12" r="9" stroke={color} strokeWidth="1.8" />
+                    <circle cx="12" cy="12" r="6" stroke={color} strokeWidth="1.2" strokeOpacity="0.45" />
+                    <path
+                        d="M12 8v8M14.2 10.2c0-.9-1-1.5-2.2-1.5s-2.2.6-2.2 1.5c0 1.9 4.4 1 4.4 3 0 .9-1 1.5-2.2 1.5s-2.2-.7-2.2-1.6"
+                        stroke={color}
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        fill="none"
+                    />
+                </svg>
+            );
+        case 'flame':
+            // Premium alanga: tashqi va ichki olov qatlami
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+                    <path
+                        d="M12 2.5c.8 3.2 4.5 4.8 4.5 9 0 3.6-2 6.5-4.5 6.5S7.5 15.1 7.5 11.5c0-1.3.6-2.3 1.3-3.1-.4 1.6.2 2.8 1 3.3-.5-2 .6-4.1 2.2-9.2z"
+                        fill={color}
+                        fillOpacity="0.2"
+                        stroke={color}
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                    />
+                    <path
+                        d="M12 13c1.1 1.1 1.7 2 1.7 3 0 1-.8 1.7-1.7 1.7s-1.7-.7-1.7-1.7c0-1 .6-1.9 1.7-3z"
+                        fill={color}
+                    />
+                    <path
+                        d="M10.5 19.5c0 1.4 0.7 2 1.5 2s1.5-.6 1.5-2"
+                        stroke={color}
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        fill="none"
+                    />
+                </svg>
+            );
+        case 'trophy':
+            // Premium kubok: ushlagichlar + asos + yulduz
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+                    <path
+                        d="M7 3.5h10v6.5a5 5 0 0 1-10 0V3.5z"
+                        fill={color}
+                        fillOpacity="0.2"
+                        stroke={color}
+                        strokeWidth="1.8"
+                        strokeLinejoin="round"
+                    />
+                    <path
+                        d="M7 5.5H4.8a1.5 1.5 0 0 0 0 3c.5 1.4 1.4 2.4 2.4 3"
+                        stroke={color}
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                    />
+                    <path
+                        d="M17 5.5h2.2a1.5 1.5 0 0 1 0 3c-.5 1.4-1.4 2.4-2.4 3"
+                        stroke={color}
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                    />
+                    <path
+                        d="M10 15h4l-.4 3h-3.2L10 15z"
+                        fill={color}
+                        fillOpacity="0.3"
+                        stroke={color}
+                        strokeWidth="1.7"
+                        strokeLinejoin="round"
+                    />
+                    <path d="M7.5 20.5h9" stroke={color} strokeWidth="1.9" strokeLinecap="round" />
+                    <path
+                        d="M12 5.5l.75 1.6 1.75.2-1.3 1.25.35 1.7L12 9.4l-1.55.85.35-1.7L9.5 7.3l1.75-.2L12 5.5z"
+                        fill={color}
+                    />
+                </svg>
+            );
+        case 'protein':
+            return (
+                <svg {...common}>
+                    <path d="M15.5 4.5a4.5 4.5 0 0 0-7 5.5L4 14.5a2 2 0 1 0 2.5 2.5l1-1 1 1 1-1 4.5-4.5a4.5 4.5 0 0 0 1.5-7z" />
+                </svg>
+            );
+        case 'fat':
+            return (
+                <svg {...common}>
+                    <path d="M12 3c-3 4-6 7-6 10.5a6 6 0 0 0 12 0C18 10 15 7 12 3z" />
+                </svg>
+            );
+        case 'carbs':
+            return (
+                <svg {...common}>
+                    <path d="M12 21V8" />
+                    <path d="M12 8c0-2.5 2-4.5 4.5-4.5C16.5 6 14.5 8 12 8z" />
+                    <path d="M12 8c0-2.5-2-4.5-4.5-4.5C7.5 6 9.5 8 12 8z" />
+                    <path d="M12 13c0-2 2-3.5 4-3.5 0 2-2 3.5-4 3.5z" />
+                    <path d="M12 13c0-2-2-3.5-4-3.5 0 2 2 3.5 4 3.5z" />
+                    <path d="M12 18c0-2 2-3.5 4-3.5 0 2-2 3.5-4 3.5z" />
+                    <path d="M12 18c0-2-2-3.5-4-3.5 0 2 2 3.5 4 3.5z" />
+                </svg>
+            );
+        case 'utensils':
+            return (
+                <svg {...common}>
+                    <path d="M7 3v8a2 2 0 0 0 2 2v8" />
+                    <path d="M11 3v8" />
+                    <path d="M9 3v6" />
+                    <path d="M17 3c-1.5 0-3 2-3 5s1.5 4 3 4v9" />
+                </svg>
+            );
+        case 'bowl':
+            return (
+                <svg {...common}>
+                    <path d="M3 11h18" />
+                    <path d="M4 11a8 8 0 0 0 16 0" />
+                    <path d="M9 7c0-1 1-2 1-2s-1-1-1-2" />
+                    <path d="M13 7c0-1 1-2 1-2s-1-1-1-2" />
+                </svg>
+            );
+    }
+}
+
 export default function Dashboard() {
     const { t } = useTranslation();
     const [logs, setLogs] = useState<any[]>([]);
@@ -135,12 +279,12 @@ export default function Dashboard() {
                 style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
             >
                 <div className="max-w-md mx-auto px-5 pt-7">
-                    {/* Header */}
+                    {/* Header — coin / flame / trophy 3 ta ketma-ket */}
                     <motion.div
                         initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={SPRING}
-                        className="flex items-center justify-between mb-5"
+                        className="flex items-center justify-between mb-5 gap-3"
                     >
                         <div className="min-w-0 flex-1">
                             <div className="text-[13px] text-stone-500 dark:text-slate-400 font-medium">{greeting}</div>
@@ -155,7 +299,7 @@ export default function Dashboard() {
                                 className="flex items-center gap-1.5 bg-white dark:bg-[#1E252E] px-3 py-2.5 rounded-2xl"
                                 style={{ boxShadow: '0 4px 12px rgba(91, 106, 208, 0.10)' }}
                             >
-                                <span className="text-base">🪙</span>
+                                <span className="text-[#F59E0B]"><DIcon name="coin" size={18} /></span>
                                 <span className="text-sm font-extrabold text-stone-800 dark:text-slate-200">{coins}</span>
                             </motion.button>
                             <motion.div
@@ -163,19 +307,20 @@ export default function Dashboard() {
                                 className="flex items-center gap-1.5 bg-white dark:bg-[#1E252E] px-3 py-2.5 rounded-2xl"
                                 style={{ boxShadow: '0 4px 12px rgba(91, 106, 208, 0.10)' }}
                             >
-                                <span className="text-base">🔥</span>
+                                <span className="text-[#EF4444]"><DIcon name="flame" size={18} /></span>
                                 <span className="text-sm font-extrabold text-stone-800 dark:text-slate-200">{streak}</span>
                             </motion.div>
+                            <motion.button
+                                whileTap={{ scale: 0.92 }}
+                                onClick={() => setShowAchievements(true)}
+                                className="flex items-center justify-center bg-white dark:bg-[#1E252E] w-11 h-11 rounded-2xl"
+                                style={{ boxShadow: '0 4px 12px rgba(91, 106, 208, 0.10)' }}
+                                aria-label="Achievements"
+                            >
+                                <span className="text-[#F59E0B]"><DIcon name="trophy" size={18} /></span>
+                            </motion.button>
                         </div>
                     </motion.div>
-                    <motion.button
-                        whileTap={{ scale: 0.92 }}
-                        onClick={() => setShowAchievements(true)}
-                        className="flex items-center gap-1.5 bg-white dark:bg-[#1E252E] px-3 py-2.5 rounded-2xl"
-                        style={{ boxShadow: '0 4px 12px rgba(91, 106, 208, 0.10)' }}
-                    >
-                        <span className="text-base">🏆</span>
-                    </motion.button>
 
                     {/* Hero card */}
                     <motion.div
@@ -248,9 +393,9 @@ export default function Dashboard() {
 
                     {/* Macros */}
                     <div className="grid grid-cols-3 gap-2.5">
-                        <MacroCard label={t('macro_protein')} icon="🥩" value={total.protein} target={proteinTarget} bg="#FFF4D6" delay={0.14} />
-                        <MacroCard label={t('macro_fat')} icon="🥑" value={total.fat} target={fatTarget} bg="#FAD9C8" delay={0.18} />
-                        <MacroCard label={t('macro_carbs')} icon="🍞" value={total.carbs} target={carbsTarget} bg="#DDE3F5" delay={0.22} />
+                        <MacroCard label={t('macro_protein')} iconName="protein" iconColor="#B45309" value={total.protein} target={proteinTarget} bg="#FFF4D6" delay={0.14} />
+                        <MacroCard label={t('macro_fat')} iconName="fat" iconColor="#C2410C" value={total.fat} target={fatTarget} bg="#FAD9C8" delay={0.18} />
+                        <MacroCard label={t('macro_carbs')} iconName="carbs" iconColor="#3730A3" value={total.carbs} target={carbsTarget} bg="#DDE3F5" delay={0.22} />
                     </div>
 
                     {/* Water tracker */}
@@ -291,7 +436,9 @@ export default function Dashboard() {
 
                         {logs.length === 0 ? (
                             <div className="bg-white dark:bg-[#1E252E] dark:bg-[#1E252E] rounded-2xl p-8 text-center">
-                                <div className="text-3xl mb-2">🍽️</div>
+                                <div className="flex justify-center mb-2 text-stone-400 dark:text-slate-500">
+                                    <DIcon name="utensils" size={32} />
+                                </div>
                                 <div className="text-sm text-stone-500 dark:text-slate-400 font-semibold">{t('no_meals')}</div>
                             </div>
                         ) : (
@@ -306,10 +453,10 @@ export default function Dashboard() {
                                     >
                                         <div className="flex items-center gap-3 flex-1 min-w-0">
                                             <div
-                                                className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl flex-shrink-0"
+                                                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 text-[#5B6AD0]"
                                                 style={{ background: 'var(--color-bg)' }}
                                             >
-                                                🍲
+                                                <DIcon name="bowl" size={22} />
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="font-extrabold text-stone-900 dark:text-slate-100 truncate capitalize text-[15px]">
@@ -334,7 +481,6 @@ export default function Dashboard() {
                     </motion.div>
                 </div>
             </div>
-
             <AnimatePresence>
                 {showShop && (
                     <SkinShop
@@ -371,8 +517,8 @@ export default function Dashboard() {
     );
 }
 
-function MacroCard({ label, icon, value, target, bg, delay }: {
-    label: string; icon: string; value: number; target: number; bg: string; delay: number;
+function MacroCard({ label, iconName, iconColor, value, target, bg, delay }: {
+    label: string; iconName: IconName; iconColor: string; value: number; target: number; bg: string; delay: number;
 }) {
     const percent = Math.min(100, (value / target) * 100);
     return (
@@ -385,8 +531,8 @@ function MacroCard({ label, icon, value, target, bg, delay }: {
             style={{ background: bg }}
         >
             <div className="flex items-center justify-between mb-1">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-white">
-                    <span className="text-sm">{icon}</span>
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-white" style={{ color: iconColor }}>
+                    <DIcon name={iconName} size={16} color={iconColor} />
                 </div>
                 <span className="text-[9px] font-extrabold  text-[#44403c] uppercase tracking-wider">{label}</span>
             </div>

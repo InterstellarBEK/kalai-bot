@@ -324,7 +324,12 @@ export default function Scanner() {
                                         className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0"
                                         style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)' }}
                                     >
-                                        📷
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                                            <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.7l1.4-2h4.8l1.4 2h1.7A2.5 2.5 0 0 1 20 8.5v8a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5v-8z" fill="#fff" fillOpacity="0.25" stroke="#fff" strokeWidth="1.8" strokeLinejoin="round" />
+                                            <circle cx="12" cy="13" r="3.8" fill="#fff" fillOpacity="0.4" stroke="#fff" strokeWidth="1.8" />
+                                            <circle cx="12" cy="13" r="1.5" fill="#fff" />
+                                            <circle cx="17" cy="9" r=".8" fill="#fff" />
+                                        </svg>
                                     </div>
                                     <div className="flex-1 min-w-0 relative">
                                         <div className="text-white font-extrabold text-[16px] leading-tight">
@@ -353,7 +358,11 @@ export default function Scanner() {
                                             boxShadow: '0 4px 10px -4px rgba(91, 106, 208, 0.3)',
                                         }}
                                     >
-                                        🖼
+                                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                                            <rect x="3" y="4" width="18" height="16" rx="3" fill="#5B6AD0" fillOpacity="0.35" stroke="#4A58B8" strokeWidth="2" />
+                                            <circle cx="8.5" cy="9.5" r="1.8" fill="#4A58B8" />
+                                            <path d="M3.5 17.5l4.5-4.5 3.5 3.5 3.5-3.5 5 5" stroke="#4A58B8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                                        </svg>
                                     </div>
                                     <div className="text-[11px] font-extrabold leading-none" style={{ color: '#4A58B8' }}>
                                         {t('scan_gallery')}
