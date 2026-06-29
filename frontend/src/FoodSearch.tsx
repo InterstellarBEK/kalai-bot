@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabase';
-import { getTelegramId } from './telegram';
+import { getTelegramId, showAlert } from './telegram';
 import { addCoinsForLog, COINS_PER_LOG } from './coins';
 import Bekjon from './components/Bekjon';
 import { useTranslation } from './i18n';
@@ -322,7 +322,7 @@ export default function FoodSearch() {
             setTimeout(() => setSavedFood(null), 2000);
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('food_save_error');
-            alert(msg);
+            await showAlert(msg);
         } finally {
             setFavActionId(null);
         }
@@ -412,7 +412,7 @@ export default function FoodSearch() {
             setHasSearched(true);
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('error_prefix');
-            alert(msg);
+            await showAlert(msg);
         } finally {
             setSearching(false);
         }
@@ -461,7 +461,7 @@ export default function FoodSearch() {
             setTimeout(() => setSavedFood(null), 2000);
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('food_save_error');
-            alert(msg);
+            await showAlert(msg);
         } finally {
             setSavingId(null);
         }

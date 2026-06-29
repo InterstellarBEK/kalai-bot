@@ -12,7 +12,7 @@ import PaywallScreen from './PaywallScreen'
 import PremiumSettingsScreen from './PremiumSettingsScreen'
 import ReferralScreen from './ReferralScreen'
 import LanguageScriptPicker from './LanguageScriptPicker'
-import { initTelegram, getTelegramId, getStartParam } from './telegram'
+import { initTelegram, getTelegramId, getStartParam, showAlert } from './telegram'
 import { useTranslation, setLanguage, type Lang } from './i18n'
 import { getTheme, toggleTheme, type Theme } from './theme'
 
@@ -105,15 +105,15 @@ function App() {
     // Validation: bo'sh yoki chegara tashqarisida bo'lsa to'xtat
     if (!a || !w || !h) return
     if (a < AGE_MIN || a > AGE_MAX) {
-      alert(`Yosh ${AGE_MIN}–${AGE_MAX} oralig'ida bo'lishi kerak`)
+      await showAlert(`Yosh ${AGE_MIN}–${AGE_MAX} oralig'ida bo'lishi kerak`)
       return
     }
     if (w < WEIGHT_MIN || w > WEIGHT_MAX) {
-      alert(`Vazn ${WEIGHT_MIN}–${WEIGHT_MAX} kg oralig'ida bo'lishi kerak`)
+      await showAlert(`Vazn ${WEIGHT_MIN}–${WEIGHT_MAX} kg oralig'ida bo'lishi kerak`)
       return
     }
     if (h < HEIGHT_MIN || h > HEIGHT_MAX) {
-      alert(`Bo'y ${HEIGHT_MIN}–${HEIGHT_MAX} cm oralig'ida bo'lishi kerak`)
+      await showAlert(`Bo'y ${HEIGHT_MIN}–${HEIGHT_MAX} cm oralig'ida bo'lishi kerak`)
       return
     }
 
@@ -136,7 +136,7 @@ function App() {
     }, { onConflict: 'telegram_id' })
 
     setSaving(false)
-    if (error) { alert('Xato: ' + error.message); return }
+    if (error) { await showAlert('Xato: ' + error.message); return }
     setSaved(true)
   }
 

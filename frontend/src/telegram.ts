@@ -32,7 +32,6 @@ export function isVersionAtLeast(target: string): boolean {
     if (typeof tg.isVersionAtLeast === 'function') {
         try { return tg.isVersionAtLeast(target) } catch { /* fall through */ }
     }
-    // Manual fallback comparison
     const a = String(tg.version ?? '6.0').split('.').map(Number)
     const b = target.split('.').map(Number)
     for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -44,6 +43,19 @@ export function isVersionAtLeast(target: string): boolean {
     return true
 }
 
+/** Haptic feedback wrapper (no-op outside Telegram or unsupported versions) */
+export function hapticImpact(style: 'light' | 'medium' | 'heavy' | 'rigid' | 'soft' = 'light') {
+    try { tg?.HapticFeedback?.impactOccurred?.(style) } catch { /* noop */ }
+}
+
+export function hapticNotify(type: 'error' | 'success' | 'warning') {
+    try { tg?.HapticFeedback?.notificationOccurred?.(type) } catch { /* noop */ }
+}
+
+export function hapticSelection() {
+    try { tg?.HapticFeedback?.selectionChanged?.() } catch { /* noop */ }
+}
+
 export type InvoiceStatus = 'paid' | 'cancelled' | 'failed' | 'pending' | 'unsupported'
 
 /**
@@ -52,14 +64,12 @@ export type InvoiceStatus = 'paid' | 'cancelled' | 'failed' | 'pending' | 'unsup
  */
 export function openInvoice(link: string): Promise<InvoiceStatus> {
     return new Promise((resolve) => {
-        // No Telegram context at all (browser dev)
         if (!tg) {
             window.open(link, '_blank')
             resolve('pending')
             return
         }
 
-        // openInvoice requires Bot API 6.1+
         if (!isVersionAtLeast('6.1') || typeof tg.openInvoice !== 'function') {
             resolve('unsupported')
             return
@@ -76,7 +86,8 @@ export function openInvoice(link: string): Promise<InvoiceStatus> {
 }
 
 /**
- * Show a Telegram-native alert (with fallback to browser alert).
+ * Show a Telegram-native alert. Falls back to window.alert outside Telegram.
+ * Use for error / info / success messages with a single OK button.
  */
 export function showAlert(message: string): Promise<void> {
     return new Promise((resolve) => {
@@ -86,7 +97,76 @@ export function showAlert(message: string): Promise<void> {
                 return
             } catch { /* fall through */ }
         }
-        try { window.alert(message) } catch { }
+        try { window.alert(message) } catch { /* noop */ }
         resolve()
+    })
+}
+
+/**
+ * Show a Telegram-native Yes/No confirm dialog.
+ * Telegram localizes the buttons by user's Telegram language.
+ * Returns true if user pressed OK/Yes, false if Cancel/No.
+ * Falls back to window.confirm outside Telegram.
+ */
+export function showConfirm(message: string): Promise<boolean> {
+    return new Promise((resolve) => {
+        if (tg?.showConfirm && isVersionAtLeast('6.2')) {
+            try {
+                tg.showConfirm(message, (ok: boolean) => resolve(!!ok))
+                return
+            } catch { /* fall through */ }
+        }
+        try { resolve(!!window.confirm(message)) } catch { resolve(false) }
+    })
+}
+
+export type PopupButton = {
+    id?: string
+    type?: 'default' | 'ok' | 'close' | 'cancel' | 'destructive'
+    text?: string
+}
+
+/**
+ * Show a Telegram-native popup with custom buttons (up to 3).
+ * Returns the id of the pressed button, or null if dismissed.
+ * Use for destructive confirms (e.g. delete) where button text needs to match app language.
+ * Falls back to window.confirm outside Telegram (returns first non-cancel button id).
+ */
+export function showPopup(opts: {
+    title?: string
+    message: string
+    buttons?: PopupButton[]
+}): Promise<string | null> {
+    return new Promise((resolve) => {
+        const buttons = opts.buttons ?? [{ type: 'ok', id: 'ok' }]
+
+        if (tg?.showPopup && isVersionAtLeast('6.2')) {
+            try {
+                tg.showPopup(
+                    {
+                        title: opts.title?.slice(0, 64),
+                        message: opts.message.slice(0, 256),
+                        buttons: buttons.slice(0, 3).map((b, i) => ({
+                            id: b.id ?? String(i),
+                            type: b.type ?? 'default',
+                            text: b.text?.slice(0, 64),
+                        })),
+                    },
+                    (id: string) => resolve(id ?? null)
+                )
+                return
+            } catch { /* fall through */ }
+        }
+
+        // Browser fallback: if there's a destructive/non-cancel button, ask confirm
+        const primary = buttons.find(b => b.type !== 'cancel' && b.type !== 'close')
+        const cancel = buttons.find(b => b.type === 'cancel' || b.type === 'close')
+        if (primary && cancel) {
+            const ok = window.confirm(opts.message)
+            resolve(ok ? (primary.id ?? '0') : (cancel.id ?? null))
+        } else {
+            window.alert(opts.message)
+            resolve(primary?.id ?? 'ok')
+        }
     })
 }

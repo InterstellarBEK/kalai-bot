@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from './supabase'
-import { getTelegramId, getTelegramFirstName } from './telegram'
+import { getTelegramId, getTelegramFirstName, showAlert } from './telegram'
 import Bekjon from './components/Bekjon'
 import WheelPicker from './components/WheelPicker'
 import { useTranslation } from './i18n'
@@ -63,7 +63,7 @@ export default function Onboarding({ onComplete }: Props) {
             }, { onConflict: 'telegram_id' })
 
             if (error) {
-                alert('Upsert xato: ' + error.message)
+                await showAlert('Upsert xato: ' + error.message)
                 setSaving(false)
                 return
             }
@@ -77,7 +77,7 @@ export default function Onboarding({ onComplete }: Props) {
             setSaving(false)
             onComplete()
         } catch (e: any) {
-            alert('Exception: ' + (e?.message || String(e)))
+            await showAlert('Exception: ' + (e?.message || String(e)))
             setSaving(false)
         }
     }

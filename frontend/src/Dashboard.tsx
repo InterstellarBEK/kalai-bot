@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabase';
-import { getTelegramId } from './telegram';
+import { getTelegramId, showAlert, showPopup } from './telegram';
 import { getSkinById } from './skins';
 import Bekjon from './components/Bekjon';
 import type { BekjonMood } from './components/Bekjon';
@@ -210,16 +210,23 @@ export default function Dashboard() {
             .gte('logged_at', start.toISOString())
             .order('logged_at', { ascending: false });
         if (error) {
-            alert(t('error_prefix') + error.message);
+            await showAlert(t('error_prefix') + error.message);
             return;
         }
         setLogs(data || []);
     }
 
     async function deleteLog(id: number) {
-        if (!confirm(t('confirm_delete'))) return;
+        const pressed = await showPopup({
+            message: t('confirm_delete'),
+            buttons: [
+                { id: 'cancel', type: 'cancel', text: t('btn_cancel') },
+                { id: 'delete', type: 'destructive', text: t('btn_delete') },
+            ],
+        });
+        if (pressed !== 'delete') return;
         const { error } = await supabase.from('food_logs').delete().eq('id', id);
-        if (error) alert(t('error_prefix') + error.message);
+        if (error) await showAlert(t('error_prefix') + error.message);
         else loadToday();
     }
 

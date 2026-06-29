@@ -8,6 +8,7 @@ import {
     type WeightEntry, type WeightTrend, type BMIInfo,
 } from "./weight";
 import { useTranslation } from "./i18n";
+import { showAlert } from './telegram';
 
 const SPRING = { type: "spring" as const, stiffness: 280, damping: 26 };
 
@@ -118,12 +119,12 @@ export function WeightTracker() {
     async function handleSave() {
         const val = parseFloat(input);
         if (!val || val < 20 || val > 300) {
-            alert(t('weight_invalid'));
+            await showAlert(t('weight_invalid'));
             return;
         }
         setLoading(true);
         const ok = await addWeight(val);
-        if (!ok) { alert(t('save_error')); setLoading(false); return; }
+        if (!ok) { await showAlert(t('save_error')); setLoading(false); return; }
         setInput(""); setMode("idle");
         await refresh();
         setLoading(false);
@@ -132,12 +133,12 @@ export function WeightTracker() {
     async function handleSaveTarget() {
         const val = parseFloat(targetInput);
         if (!val || val < 20 || val > 300) {
-            alert(t('weight_target_invalid'));
+            await showAlert(t('weight_target_invalid'));
             return;
         }
         setLoading(true);
         const ok = await setTargetWeight(val);
-        if (!ok) { alert(t('save_error')); setLoading(false); return; }
+        if (!ok) { await showAlert(t('save_error')); setLoading(false); return; }
         setTargetInput(""); setMode("idle");
         await refresh();
         setLoading(false);

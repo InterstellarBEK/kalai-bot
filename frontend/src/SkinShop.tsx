@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { supabase } from './supabase';
-import { getTelegramId } from './telegram';
+import { getTelegramId, showAlert } from './telegram';
 import { purchaseSkin, equipSkin, getOwnedSkins } from './coins';
 import { SKINS, CATEGORIES, getSkinName, getSkinDescription, getCategoryLabel, type SkinCategory, type Skin } from './skins';
 import { useTranslation } from './i18n';
@@ -46,7 +46,7 @@ export default function SkinShop({ onClose }: Props) {
     async function handlePurchase(skin: Skin) {
         if (processingId) return;
         if (coins < skin.price) {
-            alert(t('shop_no_coins'));
+            await showAlert(t('shop_no_coins'));
             return;
         }
         setProcessingId(skin.id);
@@ -55,7 +55,7 @@ export default function SkinShop({ onClose }: Props) {
             setCoins(result.new_coins ?? coins - skin.price);
             setOwned(prev => [...prev, skin.id]);
         } else {
-            alert(result.error || t('shop_purchase_err'));
+            await showAlert(result.error || t('shop_purchase_err'));
         }
         setProcessingId(null);
     }

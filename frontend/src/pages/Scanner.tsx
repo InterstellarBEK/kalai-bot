@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../supabase';
-import { getTelegramId } from '../telegram';
+import { getTelegramId, showAlert } from '../telegram';
 import { addCoinsForLog, COINS_PER_LOG } from '../coins';
 import Bekjon from '../components/Bekjon';
 import { useTranslation } from '../i18n';
@@ -72,7 +72,7 @@ export default function Scanner() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || t('scan_unknown_error'));
             if (!data.food_name) {
-                alert(t('scan_no_food'));
+                await showAlert(t('scan_no_food'));
                 setLoading(false);
                 return;
             }
@@ -87,7 +87,7 @@ export default function Scanner() {
             });
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('scan_unknown_error');
-            alert(`${t('error_prefix')}${msg}`);
+            await showAlert(`${t('error_prefix')}${msg}`);
         } finally {
             setLoading(false);
         }
@@ -112,7 +112,7 @@ export default function Scanner() {
             setPendingProduct(p);
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('scan_save_error');
-            alert(`${t('error_prefix')}${msg}`);
+            await showAlert(`${t('error_prefix')}${msg}`);
         } finally {
             setLookingUp(false);
         }
@@ -155,7 +155,7 @@ export default function Scanner() {
             setTimeout(() => setSaved(false), 2200);
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('scan_save_error');
-            alert(`${t('error_prefix')}${msg}`);
+            await showAlert(`${t('error_prefix')}${msg}`);
         } finally {
             setSaving(false);
         }
@@ -210,7 +210,7 @@ export default function Scanner() {
             setTimeout(() => setSaved(false), 2200);
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('scan_save_error');
-            alert(`${t('error_prefix')}${msg}`);
+            await showAlert(`${t('error_prefix')}${msg}`);
         } finally {
             setSaving(false);
         }
@@ -264,7 +264,7 @@ export default function Scanner() {
             setTimeout(() => handleReset(), 2200);
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('scan_save_error');
-            alert(`${t('error_prefix')}${msg}`);
+            await showAlert(`${t('error_prefix')}${msg}`);
         } finally {
             setSaving(false);
         }

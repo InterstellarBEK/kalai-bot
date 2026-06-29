@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabase';
-import { getTelegramId } from './telegram';
+import { getTelegramId, showAlert } from './telegram';
 import {
     getTopFavorites,
     toggleFavoritePin,
@@ -277,7 +277,7 @@ export default function QuickAddCard({ onLogged }: Props) {
             onLogged?.();
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Xato';
-            alert(msg);
+            await showAlert(msg);
         } finally {
             setSavingId(null);
         }
