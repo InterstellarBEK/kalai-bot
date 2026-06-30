@@ -19,6 +19,27 @@ import {
 const DEFAULT_PORTIONS = [50, 100, 150, 200, 300];
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
 
+type MealKey = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+const MEAL_EMOJI: Record<MealKey, string> = {
+    breakfast: '🌅',
+    lunch: '☀️',
+    dinner: '🌆',
+    snack: '🌙',
+};
+
+const MEAL_LABEL_KEY: Record<MealKey, string> = {
+    breakfast: 'meal_breakfast',
+    lunch: 'meal_lunch',
+    dinner: 'meal_dinner',
+    snack: 'meal_snack',
+};
+
+interface FoodSearchProps {
+    initialMealType?: MealKey | null;
+    onMealConsumed?: () => void;
+}
+
 interface Portion {
     name?: string;
     grams: number;
@@ -215,8 +236,12 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
     );
 }
 
-export default function FoodSearch() {
+export default function FoodSearch({ initialMealType = null, onMealConsumed }: FoodSearchProps = {}) {
     const { t, lang } = useTranslation();
+
+    // Dashboard'dan kelgan meal type (prefill) — yoki user qo'lda tanlasa
+    const [currentMealType, setCurrentMealType] = useState<MealKey | null>(initialMealType);
+
 
     // Lang-aware nom tanlash
     function displayName(food: Food, nameRu?: string | null): string {
@@ -265,6 +290,14 @@ export default function FoodSearch() {
     const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
     const [localQuery, setLocalQuery] = useState('');
 
+    // Dashboard'dan kelgan meal type prefill — har gal yangi event kelsa
+    useEffect(() => {
+        if (initialMealType) {
+            setCurrentMealType(initialMealType);
+            setActiveTab('search');
+        }
+    }, [initialMealType]);
+
     // Mahalliy taomlarni cache'ga yuklash
     useEffect(() => {
         (async () => {
@@ -299,6 +332,7 @@ export default function FoodSearch() {
                 protein: +(fav.protein_per_100g * ratio).toFixed(1),
                 fat: +(fav.fat_per_100g * ratio).toFixed(1),
                 carbs: +(fav.carbs_per_100g * ratio).toFixed(1),
+                meal_type: currentMealType,
             });
             if (error) throw error;
             // use_count oshirish
@@ -320,6 +354,12 @@ export default function FoodSearch() {
             );
             setSavedFood({ name: fav.food_name, grams, cal: calories });
             setTimeout(() => setSavedFood(null), 2000);
+            // Dashboard'ga "log qo'shildi" signali — MealBreakdown va dailyCalories yangilanishi uchun
+            window.dispatchEvent(new CustomEvent('lokma:log-added'));
+            if (currentMealType && onMealConsumed) {
+                onMealConsumed();
+                setCurrentMealType(null);
+            }
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('food_save_error');
             await showAlert(msg);
@@ -439,6 +479,7 @@ export default function FoodSearch() {
                 protein: +(food.protein * ratio).toFixed(1),
                 fat: +(food.fat * ratio).toFixed(1),
                 carbs: +(food.carbs * ratio).toFixed(1),
+                meal_type: currentMealType,
             });
             if (error) throw error;
 
@@ -459,6 +500,12 @@ export default function FoodSearch() {
 
             setSavedFood({ name: displayName(food, food.name_ru), grams, cal: calories });
             setTimeout(() => setSavedFood(null), 2000);
+            // Dashboard'ga "log qo'shildi" signali
+            window.dispatchEvent(new CustomEvent('lokma:log-added'));
+            if (currentMealType && onMealConsumed) {
+                onMealConsumed();
+                setCurrentMealType(null);
+            }
         } catch (err) {
             const msg = err instanceof Error ? err.message : t('food_save_error');
             await showAlert(msg);
@@ -481,6 +528,49 @@ export default function FoodSearch() {
                         {t('food_subtitle')}
                     </p>
                 </motion.div>
+
+                {/* Meal context badge — Dashboard'dan "+ Nonushta" kabi tugmadan kelganda */}
+                <AnimatePresence>
+                    {currentMealType && (
+                        <motion.div
+                            key={`meal-ctx-${currentMealType}`}
+                            initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                            transition={SPRING}
+                            className="rounded-2xl px-4 py-3 mb-4 flex items-center gap-3"
+                            style={{
+                                background: 'linear-gradient(135deg, rgba(91,106,208,0.12) 0%, rgba(122,138,232,0.10) 100%)',
+                                border: '1.5px solid rgba(91, 106, 208, 0.28)',
+                            }}
+                        >
+                            <div
+                                className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+                                style={{ background: '#FFFFFF', boxShadow: '0 4px 10px -4px rgba(91,106,208,0.25)' }}
+                            >
+                                {MEAL_EMOJI[currentMealType]}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#5B6AD0' }}>
+                                    {t('meal_adding_to')}
+                                </div>
+                                <div className="text-sm font-extrabold text-stone-900 dark:text-slate-100 truncate">
+                                    {t(MEAL_LABEL_KEY[currentMealType])}
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setCurrentMealType(null)}
+                                className="w-8 h-8 rounded-full flex items-center justify-center"
+                                style={{ background: 'rgba(91,106,208,0.12)' }}
+                                aria-label="clear"
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6AD0" strokeWidth="2.5" strokeLinecap="round">
+                                    <path d="M6 6l12 12M6 18L18 6" />
+                                </svg>
+                            </button>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Tab pill — Qidiruv / Sevimlilar / Mahalliy */}
                 <div

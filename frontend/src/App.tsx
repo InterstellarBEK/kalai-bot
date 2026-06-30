@@ -17,6 +17,7 @@ import { useTranslation, setLanguage, type Lang } from './i18n'
 import { getTheme, toggleTheme, type Theme } from './theme'
 
 type Tab = 'today' | 'scanner' | 'foods' | 'profile' | 'ramadan'
+type MealKey = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 
 const FONT = '"Plus Jakarta Sans", system-ui, sans-serif'
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 }
@@ -45,6 +46,9 @@ function App() {
   const [showPremiumSettings, setShowPremiumSettings] = useState(false)
   const [showReferral, setShowReferral] = useState(false)
 
+  // Dashboard'dan kelgan "ovqat qo'shish" eventi uchun prefill
+  const [prefilledMeal, setPrefilledMeal] = useState<MealKey | null>(null)
+
   const [gender, setGender] = useState<'male' | 'female'>('male')
   const [age, setAge] = useState('')
   const [weight, setWeight] = useState('')
@@ -59,6 +63,27 @@ function App() {
     initTelegram()
     checkLanguage()
   }, [])
+
+  // Dashboard'dagi MealBreakdownCard "Qo'shish" tugmasi event listener
+  useEffect(() => {
+    function handleOpenSearch(e: Event) {
+      const detail = (e as CustomEvent).detail as { mealType?: MealKey } | undefined
+      const mealType = detail?.mealType
+      if (mealType) setPrefilledMeal(mealType)
+      setTab('foods')
+    }
+    window.addEventListener('lokma:open-search', handleOpenSearch as EventListener)
+    return () => {
+      window.removeEventListener('lokma:open-search', handleOpenSearch as EventListener)
+    }
+  }, [])
+
+  // Foods tabidan chiqilsa prefill tozalansin (boshqa joydan kirsa "stale" bo'lmasin)
+  useEffect(() => {
+    if (tab !== 'foods' && prefilledMeal !== null) {
+      setPrefilledMeal(null)
+    }
+  }, [tab, prefilledMeal])
 
   async function checkLanguage() {
     const savedLang = localStorage.getItem('lokma_lang')
@@ -211,7 +236,12 @@ function App() {
         >
           {tab === 'today' && <Dashboard />}
           {tab === 'scanner' && <Scanner />}
-          {tab === 'foods' && <FoodSearch />}
+          {tab === 'foods' && (
+            <FoodSearch
+              initialMealType={prefilledMeal}
+              onMealConsumed={() => setPrefilledMeal(null)}
+            />
+          )}
           {tab === 'ramadan' && <RamadanScreen />}
           {tab === 'profile' && (
             <ProfileForm

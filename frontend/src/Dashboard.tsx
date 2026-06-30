@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+// src/Dashboard.tsx
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './supabase';
 import { getTelegramId, showAlert, showPopup } from './telegram';
@@ -14,12 +15,22 @@ import { AchievementsScreen } from './AchievementsScreen';
 import { checkAndUnlock } from './achievements';
 import { useTranslation } from './i18n';
 import QuickAddCard from './QuickAddCard';
+import MealBreakdownCard from './MealBreakdownCard';
+
+type MealKey = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
 const EASE_BACK = [0.34, 1.56, 0.64, 1] as const;
 
+const MEAL_EMOJI: Record<MealKey, string> = {
+    breakfast: '🌅',
+    lunch: '☀️',
+    dinner: '🌆',
+    snack: '🌙',
+};
+
 // ===== Premium SVG ikonlar (Iconly uslubi) =====
-type IconName = 'coin' | 'flame' | 'trophy' | 'protein' | 'fat' | 'carbs' | 'utensils' | 'bowl';
+type IconName = 'coin' | 'flame' | 'trophy' | 'protein' | 'fat' | 'carbs' | 'utensils' | 'bowl' | 'search';
 
 function DIcon({ name, size = 18, color = 'currentColor' }: { name: IconName; size?: number; color?: string }) {
     const common = {
@@ -34,7 +45,6 @@ function DIcon({ name, size = 18, color = 'currentColor' }: { name: IconName; si
     };
     switch (name) {
         case 'coin':
-            // Premium tanga: tashqi halqa + ichki kontur + $ belgi
             return (
                 <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="9" fill={color} fillOpacity="0.18" />
@@ -50,7 +60,6 @@ function DIcon({ name, size = 18, color = 'currentColor' }: { name: IconName; si
                 </svg>
             );
         case 'flame':
-            // Premium alanga: tashqi va ichki olov qatlami
             return (
                 <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
                     <path
@@ -75,7 +84,6 @@ function DIcon({ name, size = 18, color = 'currentColor' }: { name: IconName; si
                 </svg>
             );
         case 'trophy':
-            // Premium kubok: ushlagichlar + asos + yulduz
             return (
                 <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
                     <path
@@ -159,11 +167,18 @@ function DIcon({ name, size = 18, color = 'currentColor' }: { name: IconName; si
                     <path d="M13 7c0-1 1-2 1-2s-1-1-1-2" />
                 </svg>
             );
+        case 'search':
+            return (
+                <svg {...common}>
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M21 21l-4.3-4.3" />
+                </svg>
+            );
     }
 }
 
 export default function Dashboard() {
-    const { t } = useTranslation();
+    const { t, lang } = useTranslation();
     const [logs, setLogs] = useState<any[]>([]);
     const [target, setTarget] = useState(2000);
     const [streak, setStreak] = useState(0);
@@ -173,7 +188,10 @@ export default function Dashboard() {
     const [showShop, setShowShop] = useState(false);
     const [showAchievements, setShowAchievements] = useState(false);
     const [newAch, setNewAch] = useState<string | null>(null);
+    const [mealHint, setMealHint] = useState<MealKey | null>(null);
     const telegramId = getTelegramId();
+    const quickAddRef = useRef<HTMLDivElement>(null);
+    const hintTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         loadToday();
@@ -185,7 +203,53 @@ export default function Dashboard() {
                 loadUser();
             }
         });
+        return () => {
+            if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current);
+        };
     }, []);
+
+    // FoodSearch'dan yangi log qo'shilsa Dashboard'ni darhol yangilash
+    useEffect(() => {
+        function handleLogAdded() {
+            loadToday();
+            loadUser();
+            // Yangi achievement ochilishi mumkin (masalan 50-log, streak)
+            checkAndUnlock(getTelegramId()).then(newOnes => {
+                if (newOnes.length > 0) {
+                    setNewAch(`${newOnes[0].icon} ${newOnes[0].title} ${t('ach_unlocked')}`);
+                    setTimeout(() => setNewAch(null), 4000);
+                    loadUser();
+                }
+            });
+        }
+        window.addEventListener('lokma:log-added', handleLogAdded);
+        return () => window.removeEventListener('lokma:log-added', handleLogAdded);
+    }, []);
+
+    // Empty meal card tap qilinsa
+    function handleAddMeal(meal: MealKey) {
+        // Haptic
+        const tg = (window as any).Telegram?.WebApp;
+        tg?.HapticFeedback?.notificationOccurred?.('success');
+
+        // Hint banner ko'rsatish
+        setMealHint(meal);
+        if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current);
+        hintTimerRef.current = window.setTimeout(() => setMealHint(null), 4500);
+
+        // Smooth scroll QuickAddCard'ga
+        setTimeout(() => {
+            quickAddRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+    }
+
+    // Search tabga o'tish (App.tsx event listener bilan keyingi qadamda ulanadi)
+    function openSearchTab(meal: MealKey) {
+        const tg = (window as any).Telegram?.WebApp;
+        tg?.HapticFeedback?.impactOccurred?.('medium');
+        window.dispatchEvent(new CustomEvent('lokma:open-search', { detail: { mealType: meal } }));
+        setMealHint(null);
+    }
 
     async function loadUser() {
         const { data } = await supabase
@@ -280,6 +344,38 @@ export default function Dashboard() {
         return t('greeting_evening');
     })();
 
+    // Hint banner label
+    const hintLabel = (() => {
+        if (!mealHint) return '';
+        const map = {
+            'uz-Latn': { breakfast: 'Nonushta', lunch: 'Tushlik', dinner: 'Kechki ovqat', snack: 'Tamaddi' },
+            'uz-Cyrl': { breakfast: 'Нонушта', lunch: 'Тушлик', dinner: 'Кечки овқат', snack: 'Тамадди' },
+            ru: { breakfast: 'Завтрак', lunch: 'Обед', dinner: 'Ужин', snack: 'Перекус' },
+            en: { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' },
+        } as Record<string, Record<MealKey, string>>;
+        return (map[lang] || map['uz-Latn'])[mealHint];
+    })();
+
+    const hintMessage = (() => {
+        if (!mealHint) return '';
+        const msg = ({
+            'uz-Latn': `${hintLabel} uchun ovqat tanlang`,
+            'uz-Cyrl': `${hintLabel} учун овқат танланг`,
+            ru: `Выберите еду для: ${hintLabel}`,
+            en: `Pick a food for ${hintLabel}`,
+        } as Record<string, string>)[lang];
+        return msg || `${hintLabel} uchun ovqat tanlang`;
+    })();
+
+    const searchCta = (
+        {
+            'uz-Latn': 'Qidirish',
+            'uz-Cyrl': 'Қидириш',
+            ru: 'Найти',
+            en: 'Search',
+        } as Record<string, string>
+    )[lang] || 'Qidirish';
+
     return (
         <>
             <div
@@ -287,7 +383,7 @@ export default function Dashboard() {
                 style={{ fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif' }}
             >
                 <div className="max-w-md mx-auto px-5 pt-7">
-                    {/* Header — coin / flame / trophy 3 ta ketma-ket */}
+                    {/* Header */}
                     <motion.div
                         initial={{ opacity: 0, y: -8 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -406,6 +502,9 @@ export default function Dashboard() {
                         <MacroCard label={t('macro_carbs')} iconName="carbs" iconColor="#3730A3" value={total.carbs} target={carbsTarget} bg="#DDE3F5" delay={0.22} />
                     </div>
 
+                    {/* Mealtime breakdown — 4 segment */}
+                    <MealBreakdownCard logs={logs} dailyTarget={target} onAddMeal={handleAddMeal} />
+
                     {/* Water tracker */}
                     <div className="mt-2.5">
                         <WaterTracker />
@@ -427,16 +526,41 @@ export default function Dashboard() {
                             <FastingTracker telegramId={telegramId} />
                         </div>
                     )}
-                    {/* Quick Add / Sevimlilar */}
-                    <QuickAddCard onLogged={loadToday} />
 
-                    {/* Today's foods */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ ...SPRING, delay: 0.30 }}
-                        className="mt-6"
-                    ></motion.div>
+                    {/* Quick Add / Sevimlilar — ref + hint banner */}
+                    <div ref={quickAddRef} className="relative">
+                        <AnimatePresence>
+                            {mealHint && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10, scale: 0.96 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -10, scale: 0.96 }}
+                                    transition={SPRING}
+                                    className="mt-6 mb-2 rounded-2xl p-3.5 flex items-center justify-between gap-3"
+                                    style={{
+                                        background: 'linear-gradient(135deg, #5B6AD0 0%, #7C8EE8 100%)',
+                                        boxShadow: '0 8px 24px -8px rgba(91, 106, 208, 0.5)',
+                                    }}
+                                >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <span className="text-[22px] flex-shrink-0">{MEAL_EMOJI[mealHint]}</span>
+                                        <span className="text-[13px] font-extrabold text-white truncate leading-tight">
+                                            {hintMessage}
+                                        </span>
+                                    </div>
+                                    <motion.button
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={() => openSearchTab(mealHint)}
+                                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl flex-shrink-0 bg-white/95 text-[#5B6AD0]"
+                                    >
+                                        <DIcon name="search" size={14} color="#5B6AD0" />
+                                        <span className="text-[12px] font-extrabold">{searchCta}</span>
+                                    </motion.button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                        <QuickAddCard onLogged={loadToday} />
+                    </div>
 
                     {/* Today's foods */}
                     <motion.div
@@ -499,6 +623,7 @@ export default function Dashboard() {
                     </motion.div>
                 </div>
             </div>
+
             <AnimatePresence>
                 {showShop && (
                     <SkinShop
