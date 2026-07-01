@@ -247,7 +247,7 @@ export default function QuickAddCard({ onLogged }: Props) {
         const ratio = grams / 100;
         try {
             const { error } = await supabase.from('food_logs').insert({
-                user_id: tid,
+                telegram_id: tid,
                 food_name: fav.food_name,
                 calories: Math.round(fav.kcal_per_100g * ratio),
                 protein: +(fav.protein_per_100g * ratio).toFixed(1),

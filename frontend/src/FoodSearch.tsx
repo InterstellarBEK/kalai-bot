@@ -326,7 +326,7 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
             const ratio = grams / 100;
             const calories = Math.round(fav.kcal_per_100g * ratio);
             const { error } = await supabase.from('food_logs').insert({
-                user_id: telegramId,
+                telegram_id: telegramId,
                 food_name: fav.food_name,
                 calories,
                 protein: +(fav.protein_per_100g * ratio).toFixed(1),
@@ -473,7 +473,7 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
             if (!telegramId) throw new Error(t('food_no_telegram'));
 
             const { error } = await supabase.from('food_logs').insert({
-                user_id: telegramId,
+                telegram_id: telegramId,
                 food_name: food.name_uz,
                 calories,
                 protein: +(food.protein * ratio).toFixed(1),

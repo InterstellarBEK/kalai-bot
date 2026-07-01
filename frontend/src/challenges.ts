@@ -60,7 +60,7 @@ async function getTodayMealCount(): Promise<number> {
     const { count } = await supabase
         .from("food_logs")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", telegram_id)
+        .eq("telegram_id", telegram_id)
         .gte("logged_at", start.toISOString());
     return count ?? 0;
 }
@@ -71,7 +71,7 @@ async function getTodayCalories(): Promise<{ total: number; target: number }> {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     const [foodRes, userRes] = await Promise.all([
-        supabase.from("food_logs").select("calories").eq("user_id", telegram_id).gte("logged_at", start.toISOString()),
+        supabase.from("food_logs").select("calories").eq("telegram_id", telegram_id).gte("logged_at", start.toISOString()),
         supabase.from("users").select("daily_calories_goal").eq("telegram_id", telegram_id).single(),
     ]);
     const total = (foodRes.data ?? []).reduce((s, r) => s + Number(r.calories || 0), 0);

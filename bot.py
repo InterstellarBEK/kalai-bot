@@ -140,7 +140,7 @@ async def today_cmd(message: Message):
     logs_res = (
         await db.from_("food_logs")
         .select("food_name,calories,protein,fat,carbs")
-        .eq("user_id", tg_id)
+        .eq("telegram_id", tg_id)
         .gte("logged_at", start_utc.isoformat())
         .execute()
     )
@@ -295,7 +295,7 @@ async def add_cmd(message: Message, command: CommandObject):
     name_capitalized = name.capitalize()
 
     await db.from_("food_logs").insert({
-        "user_id": tg_id,
+        "telegram_id": tg_id,
         "food_name": name_capitalized,
         "calories": calories,
         "protein": protein,
@@ -381,7 +381,7 @@ async def save_photo(callback: CallbackQuery):
     food_name_with_portion = f"{result['food_name'].capitalize()} ({result['estimated_grams']}g)"
 
     await db.from_("food_logs").insert({
-        "user_id": tg_id,
+        "telegram_id": tg_id,
         "food_name": food_name_with_portion,
         "calories": result["calories"],
         "protein": result["protein"],
@@ -487,7 +487,7 @@ async def send_weekly_reports():
         logs_res = (
             await db.from_("food_logs")
             .select("calories,logged_at")
-            .eq("user_id", tg_id)
+            .eq("telegram_id", tg_id)
             .gte("logged_at", start_utc.isoformat())
             .lt("logged_at", end_utc.isoformat())
             .execute()

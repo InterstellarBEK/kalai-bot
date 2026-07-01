@@ -69,7 +69,7 @@ export async function getUnlocked(telegramId: number): Promise<string[]> {
 export async function fetchStats(telegramId: number): Promise<Stats> {
     const [user, logs, water, weight, fasting] = await Promise.all([
         supabase.from('users').select('current_streak').eq('telegram_id', telegramId).maybeSingle(),
-        supabase.from('food_logs').select('calories', { count: 'exact' }).eq('user_id', telegramId),
+        supabase.from('food_logs').select('calories', { count: 'exact' }).eq('telegram_id', telegramId),
         supabase.from('water_logs').select('logged_at').eq('telegram_id', telegramId),
         supabase.from('weight_logs').select('id', { count: 'exact', head: true }).eq('telegram_id', telegramId),
         supabase.from('fasting_sessions').select('id', { count: 'exact', head: true }).eq('telegram_id', telegramId).eq('status', 'completed'),

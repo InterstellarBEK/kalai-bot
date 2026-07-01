@@ -373,7 +373,7 @@ export default function Dashboard() {
             const meal_type = inferMealByTime(new Date());
 
             const { error } = await supabase.from('food_logs').insert({
-                user_id: telegramId,
+                telegram_id: telegramId,
                 food_name: portionTarget.name,
                 grams: portionGrams,
                 calories,
@@ -458,7 +458,7 @@ export default function Dashboard() {
         const { data, error } = await supabase
             .from('food_logs')
             .select('*')
-            .eq('user_id', getTelegramId())
+            .eq('telegram_id', getTelegramId())
             .gte('logged_at', start.toISOString())
             .order('logged_at', { ascending: false });
         if (error) {
@@ -972,8 +972,8 @@ export default function Dashboard() {
                                                                 whileTap={{ scale: 0.85 }}
                                                                 onClick={() => togglePin(fav)}
                                                                 className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${fav.is_pinned
-                                                                        ? 'bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/40 dark:text-amber-400'
-                                                                        : 'bg-stone-100 dark:bg-slate-800 text-stone-400 dark:text-slate-500'
+                                                                    ? 'bg-[#FEF3C7] text-[#B45309] dark:bg-amber-950/40 dark:text-amber-400'
+                                                                    : 'bg-stone-100 dark:bg-slate-800 text-stone-400 dark:text-slate-500'
                                                                     }`}
                                                                 aria-label="pin"
                                                             >
@@ -1400,8 +1400,8 @@ function PortionPickerSheet({
                                 onClick={() => selectPreset(p.grams)}
                                 disabled={saving}
                                 className={`px-4 py-2 rounded-xl flex-shrink-0 transition-colors ${isActive
-                                        ? 'bg-[#5B6AD0] text-white'
-                                        : 'bg-stone-100 dark:bg-slate-800 text-stone-700 dark:text-slate-300'
+                                    ? 'bg-[#5B6AD0] text-white'
+                                    : 'bg-stone-100 dark:bg-slate-800 text-stone-700 dark:text-slate-300'
                                     }`}
                                 style={isActive ? { boxShadow: '0 4px 12px -4px rgba(91, 106, 208, 0.5)' } : undefined}
                             >
