@@ -147,10 +147,13 @@ export function clearAuthCache() {
 
 // ===== Supabase client =====
 // supabase-js v2 `accessToken` callback'ni qo'llab-quvvatlaydi — har so'rovda avtomatik chaqiriladi.
+// DEV rejimda (localhost, Telegram WebApp yo'q) — anon key ishlatiladi (RLS o'chirilgan holatda ishlaydi).
 export const supabase = createClient(supabaseUrl, supabaseKey, {
     accessToken: async () => {
         const token = await getAuthToken()
-        return token ?? ''
+        // Agar Telegram JWT olinmasa (dev/browser test) — anon key qaytarish
+        // Bu localhost'da "Empty JWT" xatosini oldini oladi
+        return token ?? supabaseKey
     },
     auth: {
         persistSession: false,

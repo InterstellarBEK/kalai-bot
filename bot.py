@@ -14,7 +14,6 @@ from postgrest import AsyncPostgrestClient
 from aiohttp import web
 import aiohttp
 from auth import register_auth_routes
-   register_auth_routes(app)
 
 from gemini_food import analyze_food_image, analyze_nutrition_label
 from p2p_handlers import setup_p2p, handle_p2p_receipt_photo
