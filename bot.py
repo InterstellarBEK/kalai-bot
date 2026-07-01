@@ -6,6 +6,7 @@ import tempfile
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
+from auth import register_auth_routes
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, LabeledPrice, PreCheckoutQuery
@@ -1287,13 +1288,13 @@ async def start_web():
     app.router.add_post("/payme", payme_endpoint)
     app.router.add_get("/api/barcode-lookup/{barcode}", barcode_lookup_endpoint)
     setup_p2p(dp, bot, db, app, ADMIN_TELEGRAM_IDS, ADMIN_CHAT_ID, SMS_WEBHOOK_TOKEN)
+    register_auth_routes(app)
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.getenv("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     print(f"Web server started on port {port}")
-
 
 async def set_commands():
     await bot.set_my_commands([
