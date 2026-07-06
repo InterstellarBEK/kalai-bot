@@ -1,9 +1,19 @@
 // src/Dashboard.tsx
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from './supabase';
-import { getTelegramId, showAlert, showPopup } from './telegram';
-import { getSkinById } from './skins';
+import {
+    supabase,
+    toLokmaError,
+    type Result,
+} from './supabase';
+import {
+    getTelegramId,
+    showAlert,
+    showPopup,
+    hapticImpact,
+    hapticNotify,
+    hapticSelection,
+} from './telegram';
 import Bekjon from './components/Bekjon';
 import type { BekjonMood } from './components/Bekjon';
 import SkinShop from './SkinShop';
@@ -24,26 +34,29 @@ import {
     type FavoriteFood,
 } from './lib/favorites';
 
+// ===== Types =====
 type MealKey = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 type DashTab = 'today' | 'favorites' | 'local';
 
-const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
-const EASE_BACK = [0.34, 1.56, 0.64, 1] as const;
-const PORTION_PRESETS = [50, 100, 150, 200, 300];
+interface FoodLog {
+    id: number;
+    telegram_id: number;
+    food_name: string;
+    grams: number;
+    calories: number;
+    protein?: number;
+    fat?: number;
+    carbs?: number;
+    meal_type: MealKey | null;
+    logged_at: string;
+}
 
-const MEAL_EMOJI: Record<MealKey, string> = {
-    breakfast: '🌅',
-    lunch: '☀️',
-    dinner: '🌆',
-    snack: '🌙',
-};
-
-function inferMealByTime(d: Date): MealKey {
-    const h = d.getHours();
-    if (h >= 5 && h < 11) return 'breakfast';
-    if (h >= 11 && h < 15) return 'lunch';
-    if (h >= 15 && h < 21) return 'dinner';
-    return 'snack';
+interface UserRow {
+    daily_calories_goal: number | null;
+    current_streak: number | null;
+    first_name: string | null;
+    coins: number | null;
+    equipped_skin: string | null;
 }
 
 interface LocalFoodRow {
@@ -70,7 +83,64 @@ interface PortionTarget {
     source: 'favorite' | 'local';
     sourceId?: string;
     presetPortions?: { grams: number }[];
-    favoriteRef?: FavoriteFood; // sevimli tab uchun use_count yangilash
+    favoriteRef?: FavoriteFood;
+}
+
+// ===== Constants =====
+const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
+const EASE_BACK = [0.34, 1.56, 0.64, 1] as const;
+const PORTION_PRESETS = [50, 100, 150, 200, 300];
+const ACH_TOAST_MS = 4000;
+const MEAL_HINT_MS = 4500;
+const CIRCLE_RADIUS = 80;
+
+const MEAL_EMOJI: Record<MealKey, string> = {
+    breakfast: '🌅',
+    lunch: '☀️',
+    dinner: '🌆',
+    snack: '🌙',
+};
+
+const HINT_LABEL_MAP: Record<string, Record<MealKey, string>> = {
+    'uz-Latn': { breakfast: 'Nonushta', lunch: 'Tushlik', dinner: 'Kechki ovqat', snack: 'Tamaddi' },
+    'uz-Cyrl': { breakfast: 'Нонушта', lunch: 'Тушлик', dinner: 'Кечки овқат', snack: 'Тамадди' },
+    ru: { breakfast: 'Завтрак', lunch: 'Обед', dinner: 'Ужин', snack: 'Перекус' },
+    en: { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' },
+};
+
+const HINT_MSG_TEMPLATE: Record<string, (label: string) => string> = {
+    'uz-Latn': (l) => `${l} uchun ovqat tanlang`,
+    'uz-Cyrl': (l) => `${l} учун овқат танланг`,
+    ru: (l) => `Выберите еду для: ${l}`,
+    en: (l) => `Pick a food for ${l}`,
+};
+
+const SEARCH_CTA_MAP: Record<string, string> = {
+    'uz-Latn': 'Qidirish',
+    'uz-Cyrl': 'Қидириш',
+    ru: 'Найти',
+    en: 'Search',
+};
+
+function inferMealByTime(d: Date): MealKey {
+    const h = d.getHours();
+    if (h >= 5 && h < 11) return 'breakfast';
+    if (h >= 11 && h < 15) return 'lunch';
+    if (h >= 15 && h < 21) return 'dinner';
+    return 'snack';
+}
+
+// Local foods yuklash — Result wrapper bilan
+async function fetchLocalFoodsResult(): Promise<Result<LocalFoodRow[]>> {
+    try {
+        const { data, error } = await supabase.from('local_foods').select('*');
+        if (error) {
+            return { ok: false, error: toLokmaError(error, 'database') };
+        }
+        return { ok: true, data: (data as LocalFoodRow[]) ?? [] };
+    } catch (e) {
+        return { ok: false, error: toLokmaError(e, 'network') };
+    }
 }
 
 // ===== Premium SVG ikonlar (Iconly uslubi) =====
@@ -244,11 +314,10 @@ function DIcon({ name, size = 18, color = 'currentColor' }: { name: IconName; si
 
 export default function Dashboard() {
     const { t, lang } = useTranslation();
-    const [logs, setLogs] = useState<any[]>([]);
+    const [logs, setLogs] = useState<FoodLog[]>([]);
     const [target, setTarget] = useState(2000);
     const [streak, setStreak] = useState(0);
     const [coins, setCoins] = useState(0);
-    const [equippedSkinId, setEquippedSkinId] = useState<string | null>(null);
     const [name, setName] = useState('');
     const [showShop, setShowShop] = useState(false);
     const [showAchievements, setShowAchievements] = useState(false);
@@ -270,91 +339,162 @@ export default function Dashboard() {
     const telegramId = getTelegramId();
     const tabsRef = useRef<HTMLDivElement>(null);
     const hintTimerRef = useRef<number | null>(null);
+    const achToastTimerRef = useRef<number | null>(null);
 
-    useEffect(() => {
-        loadToday();
-        loadUser();
-        checkAndUnlock(getTelegramId()).then(newOnes => {
-            if (newOnes.length > 0) {
-                setNewAch(`${newOnes[0].icon} ${newOnes[0].title} ${t('ach_unlocked')}`);
-                setTimeout(() => setNewAch(null), 4000);
-                loadUser();
+    // Unmount safety + concurrent-load guards
+    const aliveRef = useRef(true);
+    const loadingTodayRef = useRef(false);
+    const loadingUserRef = useRef(false);
+    const checkingAchRef = useRef(false);
+    const tRef = useRef(t);
+    tRef.current = t;
+
+    // ===== Race-guarded loaders =====
+    const loadToday = useCallback(async () => {
+        if (loadingTodayRef.current || !telegramId) return;
+        loadingTodayRef.current = true;
+        try {
+            const start = new Date();
+            start.setHours(0, 0, 0, 0);
+            const { data, error } = await supabase
+                .from('food_logs')
+                .select('*')
+                .eq('telegram_id', telegramId)
+                .gte('logged_at', start.toISOString())
+                .order('logged_at', { ascending: false });
+            if (!aliveRef.current) return;
+            if (error) {
+                await showAlert(tRef.current('error_prefix') + error.message);
+                return;
             }
-        });
-        return () => {
-            if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current);
-        };
-    }, []);
-
-    // FoodSearch'dan yangi log qo'shilsa Dashboard'ni darhol yangilash
-    useEffect(() => {
-        function handleLogAdded() {
-            loadToday();
-            loadUser();
-            checkAndUnlock(getTelegramId()).then(newOnes => {
-                if (newOnes.length > 0) {
-                    setNewAch(`${newOnes[0].icon} ${newOnes[0].title} ${t('ach_unlocked')}`);
-                    setTimeout(() => setNewAch(null), 4000);
-                    loadUser();
-                }
-            });
+            setLogs((data as FoodLog[]) ?? []);
+        } catch (e) {
+            if (!aliveRef.current) return;
+            const err = toLokmaError(e, 'network');
+            await showAlert(tRef.current('error_prefix') + err.message);
+        } finally {
+            loadingTodayRef.current = false;
         }
+    }, [telegramId]);
+
+    const loadUser = useCallback(async () => {
+        if (loadingUserRef.current || !telegramId) return;
+        loadingUserRef.current = true;
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('daily_calories_goal, current_streak, first_name, coins, equipped_skin')
+                .eq('telegram_id', telegramId)
+                .single();
+            if (!aliveRef.current) return;
+            if (error) return;
+            const u = data as UserRow | null;
+            if (u?.daily_calories_goal != null) setTarget(u.daily_calories_goal);
+            if (u?.current_streak != null) setStreak(u.current_streak);
+            if (u?.coins != null) setCoins(u.coins);
+            if (u?.first_name) setName(u.first_name);
+        } catch {
+            /* silent */
+        } finally {
+            loadingUserRef.current = false;
+        }
+    }, [telegramId]);
+
+    const runAchievementCheck = useCallback(async () => {
+        if (checkingAchRef.current || !telegramId) return;
+        checkingAchRef.current = true;
+        try {
+            const newOnes = await checkAndUnlock(telegramId);
+            if (!aliveRef.current || newOnes.length === 0) return;
+            const first = newOnes[0];
+            setNewAch(`${first.icon} ${first.title} ${tRef.current('ach_unlocked')}`);
+            if (achToastTimerRef.current) window.clearTimeout(achToastTimerRef.current);
+            achToastTimerRef.current = window.setTimeout(() => {
+                if (aliveRef.current) setNewAch(null);
+            }, ACH_TOAST_MS);
+            // Coins/streak yangilanishi mumkin
+            void loadUser();
+        } catch {
+            /* silent */
+        } finally {
+            checkingAchRef.current = false;
+        }
+    }, [telegramId, loadUser]);
+
+    // ===== Lifecycle: mount + event listeners =====
+    useEffect(() => {
+        aliveRef.current = true;
+        void loadToday();
+        void loadUser();
+        void runAchievementCheck();
+
+        const handleLogAdded = () => {
+            void loadToday();
+            void loadUser();
+            void runAchievementCheck();
+        };
         window.addEventListener('lokma:log-added', handleLogAdded);
-        return () => window.removeEventListener('lokma:log-added', handleLogAdded);
-    }, []);
+
+        return () => {
+            aliveRef.current = false;
+            window.removeEventListener('lokma:log-added', handleLogAdded);
+            if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current);
+            if (achToastTimerRef.current) window.clearTimeout(achToastTimerRef.current);
+        };
+    }, [loadToday, loadUser, runAchievementCheck]);
 
     // Sevimli tab tanlanganda yuklash
     useEffect(() => {
         if (activeTab !== 'favorites' || !telegramId) return;
+        let cancelled = false;
         setFavLoading(true);
         getAllFavorites(telegramId, 50)
-            .then(setFavorites)
-            .catch(() => setFavorites([]))
-            .finally(() => setFavLoading(false));
+            .then((r) => { if (!cancelled) setFavorites(r); })
+            .catch(() => { if (!cancelled) setFavorites([]); })
+            .finally(() => { if (!cancelled) setFavLoading(false); });
+        return () => { cancelled = true; };
     }, [activeTab, telegramId]);
 
     // Mahalliy tab tanlanganda yuklash (faqat birinchi marta)
     useEffect(() => {
         if (activeTab !== 'local' || localFoods.length > 0) return;
+        let cancelled = false;
         setLocalLoading(true);
-        supabase
-            .from('local_foods')
-            .select('*')
-            .then(({ data, error }) => {
-                if (!error && data) setLocalFoods(data as LocalFoodRow[]);
-                setLocalLoading(false);
-            });
+        fetchLocalFoodsResult().then((r) => {
+            if (cancelled || !aliveRef.current) return;
+            if (r.ok) setLocalFoods(r.data);
+            setLocalLoading(false);
+        });
+        return () => { cancelled = true; };
     }, [activeTab, localFoods.length]);
 
+    // ===== Interactions =====
     function handleAddMeal(meal: MealKey) {
-        const tg = (window as any).Telegram?.WebApp;
-        tg?.HapticFeedback?.notificationOccurred?.('success');
-
+        hapticNotify('success');
         setMealHint(meal);
         if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current);
-        hintTimerRef.current = window.setTimeout(() => setMealHint(null), 4500);
-
+        hintTimerRef.current = window.setTimeout(() => {
+            if (aliveRef.current) setMealHint(null);
+        }, MEAL_HINT_MS);
         setTimeout(() => {
             tabsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
     }
 
     function openSearchTab(meal: MealKey) {
-        const tg = (window as any).Telegram?.WebApp;
-        tg?.HapticFeedback?.impactOccurred?.('medium');
+        hapticImpact('medium');
         window.dispatchEvent(new CustomEvent('lokma:open-search', { detail: { mealType: meal } }));
+        if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current);
         setMealHint(null);
     }
 
     function switchTab(tab: DashTab) {
-        const tg = (window as any).Telegram?.WebApp;
-        tg?.HapticFeedback?.selectionChanged?.();
+        hapticSelection();
         setActiveTab(tab);
     }
 
     function openPortionPicker(target: PortionTarget, initialGrams = 100) {
-        const tg = (window as any).Telegram?.WebApp;
-        tg?.HapticFeedback?.impactOccurred?.('light');
+        hapticImpact('light');
         setPortionTarget(target);
         setPortionGrams(initialGrams);
     }
@@ -383,7 +523,7 @@ export default function Dashboard() {
                 meal_type,
             });
             if (error) {
-                await showAlert(t('error_prefix') + error.message);
+                await showAlert(tRef.current('error_prefix') + error.message);
                 return;
             }
 
@@ -403,13 +543,11 @@ export default function Dashboard() {
                     });
                 } catch { /* ignore */ }
             } else if (portionTarget.source === 'favorite' && portionTarget.favoriteRef) {
-                // Sevimli — use_count yangilash optimistik
+                // Sevimli — use_count optimistik yangilash
+                const favRef = portionTarget.favoriteRef;
                 setFavorites((prev) =>
-                    prev.map((f) =>
-                        f.id === portionTarget.favoriteRef!.id ? { ...f, use_count: f.use_count + 1 } : f
-                    )
+                    prev.map((f) => (f.id === favRef.id ? { ...f, use_count: f.use_count + 1 } : f))
                 );
-                // Re-upsert sevimliga (use_count backend orqali)
                 try {
                     await upsertFavorite({
                         telegramId,
@@ -418,8 +556,8 @@ export default function Dashboard() {
                         proteinPer100g: portionTarget.proteinPer100g,
                         fatPer100g: portionTarget.fatPer100g,
                         carbsPer100g: portionTarget.carbsPer100g,
-                        source: portionTarget.favoriteRef.source,
-                        sourceId: portionTarget.favoriteRef.source_id ?? undefined,
+                        source: favRef.source,
+                        sourceId: favRef.source_id ?? undefined,
                         emoji: portionTarget.emoji,
                     });
                 } catch { /* ignore */ }
@@ -428,64 +566,32 @@ export default function Dashboard() {
             // Coins
             try { await addCoinsForLog(); } catch { /* ignore */ }
 
-            // Haptic success + dashboard refresh
-            const tg = (window as any).Telegram?.WebApp;
-            tg?.HapticFeedback?.notificationOccurred?.('success');
+            hapticNotify('success');
             window.dispatchEvent(new CustomEvent('lokma:log-added'));
 
-            setPortionTarget(null);
+            if (aliveRef.current) setPortionTarget(null);
         } finally {
-            setPortionSaving(false);
+            if (aliveRef.current) setPortionSaving(false);
         }
-    }
-
-    async function loadUser() {
-        const { data } = await supabase
-            .from('users')
-            .select('daily_calories_goal, current_streak, first_name, coins, equipped_skin')
-            .eq('telegram_id', getTelegramId())
-            .single();
-        if (data?.daily_calories_goal) setTarget(data.daily_calories_goal);
-        if (data?.current_streak !== undefined) setStreak(data.current_streak);
-        if (data?.coins !== undefined) setCoins(data.coins);
-        if (data?.first_name) setName(data.first_name);
-        setEquippedSkinId(data?.equipped_skin || null);
-    }
-
-    async function loadToday() {
-        const start = new Date();
-        start.setHours(0, 0, 0, 0);
-        const { data, error } = await supabase
-            .from('food_logs')
-            .select('*')
-            .eq('telegram_id', getTelegramId())
-            .gte('logged_at', start.toISOString())
-            .order('logged_at', { ascending: false });
-        if (error) {
-            await showAlert(t('error_prefix') + error.message);
-            return;
-        }
-        setLogs(data || []);
     }
 
     async function deleteLog(id: number) {
         const pressed = await showPopup({
-            message: t('confirm_delete'),
+            message: tRef.current('confirm_delete'),
             buttons: [
-                { id: 'cancel', type: 'cancel', text: t('btn_cancel') },
-                { id: 'delete', type: 'destructive', text: t('btn_delete') },
+                { id: 'cancel', type: 'cancel', text: tRef.current('btn_cancel') },
+                { id: 'delete', type: 'destructive', text: tRef.current('btn_delete') },
             ],
         });
         if (pressed !== 'delete') return;
         const { error } = await supabase.from('food_logs').delete().eq('id', id);
-        if (error) await showAlert(t('error_prefix') + error.message);
-        else loadToday();
+        if (error) await showAlert(tRef.current('error_prefix') + error.message);
+        else void loadToday();
     }
 
     async function togglePin(fav: FavoriteFood) {
         if (!telegramId) return;
-        const tg = (window as any).Telegram?.WebApp;
-        tg?.HapticFeedback?.impactOccurred?.('light');
+        hapticImpact('light');
         const newPinned = await toggleFavoritePin(telegramId, fav.id);
         setFavorites((prev) => {
             const updated = prev.map((f) => (f.id === fav.id ? { ...f, is_pinned: newPinned } : f));
@@ -497,14 +603,18 @@ export default function Dashboard() {
         });
     }
 
-    const total = logs.reduce(
-        (acc, l) => ({
-            calories: acc.calories + Number(l.calories || 0),
-            protein: acc.protein + Number(l.protein || 0),
-            fat: acc.fat + Number(l.fat || 0),
-            carbs: acc.carbs + Number(l.carbs || 0),
-        }),
-        { calories: 0, protein: 0, fat: 0, carbs: 0 }
+    // ===== Derived values =====
+    const total = useMemo(
+        () => logs.reduce(
+            (acc, l) => ({
+                calories: acc.calories + Number(l.calories || 0),
+                protein: acc.protein + Number(l.protein || 0),
+                fat: acc.fat + Number(l.fat || 0),
+                carbs: acc.carbs + Number(l.carbs || 0),
+            }),
+            { calories: 0, protein: 0, fat: 0, carbs: 0 }
+        ),
+        [logs]
     );
 
     const proteinTarget = Math.round((target * 0.30) / 4);
@@ -515,8 +625,6 @@ export default function Dashboard() {
     const percent = Math.min(100, Math.round(rawPercent));
     const remaining = Math.max(0, target - Math.round(total.calories));
     const over = Math.max(0, Math.round(total.calories) - target);
-
-    void getSkinById(equippedSkinId);
 
     const bekjonMood: BekjonMood = (() => {
         const hour = new Date().getHours();
@@ -535,8 +643,7 @@ export default function Dashboard() {
         hungry: t('msg_hungry'),
     } as Record<BekjonMood, string>)[bekjonMood];
 
-    const radius = 80;
-    const circumference = 2 * Math.PI * radius;
+    const circumference = 2 * Math.PI * CIRCLE_RADIUS;
     const strokeOffset = circumference - (percent / 100) * circumference;
 
     const greeting = (() => {
@@ -547,36 +654,13 @@ export default function Dashboard() {
         return t('greeting_evening');
     })();
 
-    const hintLabel = (() => {
-        if (!mealHint) return '';
-        const map = {
-            'uz-Latn': { breakfast: 'Nonushta', lunch: 'Tushlik', dinner: 'Kechki ovqat', snack: 'Tamaddi' },
-            'uz-Cyrl': { breakfast: 'Нонушта', lunch: 'Тушлик', dinner: 'Кечки овқат', snack: 'Тамадди' },
-            ru: { breakfast: 'Завтрак', lunch: 'Обед', dinner: 'Ужин', snack: 'Перекус' },
-            en: { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' },
-        } as Record<string, Record<MealKey, string>>;
-        return (map[lang] || map['uz-Latn'])[mealHint];
-    })();
-
-    const hintMessage = (() => {
-        if (!mealHint) return '';
-        const msg = ({
-            'uz-Latn': `${hintLabel} uchun ovqat tanlang`,
-            'uz-Cyrl': `${hintLabel} учун овқат танланг`,
-            ru: `Выберите еду для: ${hintLabel}`,
-            en: `Pick a food for ${hintLabel}`,
-        } as Record<string, string>)[lang];
-        return msg || `${hintLabel} uchun ovqat tanlang`;
-    })();
-
-    const searchCta = (
-        {
-            'uz-Latn': 'Qidirish',
-            'uz-Cyrl': 'Қидириш',
-            ru: 'Найти',
-            en: 'Search',
-        } as Record<string, string>
-    )[lang] || 'Qidirish';
+    const hintLabel = mealHint
+        ? (HINT_LABEL_MAP[lang] || HINT_LABEL_MAP['uz-Latn'])[mealHint]
+        : '';
+    const hintMessage = mealHint
+        ? (HINT_MSG_TEMPLATE[lang] || HINT_MSG_TEMPLATE['uz-Latn'])(hintLabel)
+        : '';
+    const searchCta = SEARCH_CTA_MAP[lang] || SEARCH_CTA_MAP['uz-Latn'];
 
     // === Tab metadata ===
     const TAB_LIST: { key: DashTab; iconName: IconName; label: string }[] = [
@@ -587,7 +671,6 @@ export default function Dashboard() {
 
     // === Mahalliy taomlar — saralangan ko'rinishi ===
     const sortedLocalFoods = useMemo(() => {
-        // food_logs name'lariga ko'ra use_count hisoblash
         const counts: Record<string, number> = {};
         for (const l of logs) {
             const n = (l.food_name || '').toLowerCase();
@@ -673,11 +756,11 @@ export default function Dashboard() {
                         <div className="flex items-center gap-4">
                             <div className="relative flex-shrink-0">
                                 <svg width="170" height="170" viewBox="0 0 170 170" className="-rotate-90">
-                                    <circle cx="85" cy="85" r={radius} stroke="var(--color-bg)" strokeWidth="9" fill="none" />
+                                    <circle cx="85" cy="85" r={CIRCLE_RADIUS} stroke="var(--color-bg)" strokeWidth="9" fill="none" />
                                     <motion.circle
                                         cx="85"
                                         cy="85"
-                                        r={radius}
+                                        r={CIRCLE_RADIUS}
                                         stroke="#5B6AD0"
                                         strokeWidth="9"
                                         fill="none"
@@ -853,8 +936,7 @@ export default function Dashboard() {
                                         ) : (
                                             <div className="space-y-2">
                                                 {logs.map((l, idx) => {
-                                                    const mt = (l.meal_type as MealKey | null | undefined)
-                                                        || inferMealByTime(new Date(l.logged_at));
+                                                    const mt = l.meal_type || inferMealByTime(new Date(l.logged_at));
                                                     return (
                                                         <motion.div
                                                             key={l.id}
@@ -1123,7 +1205,7 @@ export default function Dashboard() {
                     <SkinShop
                         onClose={() => {
                             setShowShop(false);
-                            loadUser();
+                            void loadUser();
                         }}
                     />
                 )}
@@ -1252,14 +1334,12 @@ function PortionPickerSheet({
 
     function step(delta: number) {
         const next = Math.max(10, Math.min(2000, grams + delta));
-        const tg = (window as any).Telegram?.WebApp;
-        tg?.HapticFeedback?.selectionChanged?.();
+        hapticSelection();
         onGramsChange(next);
     }
 
     function selectPreset(g: number) {
-        const tg = (window as any).Telegram?.WebApp;
-        tg?.HapticFeedback?.impactOccurred?.('light');
+        hapticImpact('light');
         onGramsChange(g);
     }
 

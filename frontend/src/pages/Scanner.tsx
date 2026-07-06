@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../supabase';
+import { supabase, LokmaError, NetworkError, DatabaseError, toLokmaError, type Result } from '../supabase';
 import { getTelegramId, showAlert } from '../telegram';
 import { addCoinsForLog, COINS_PER_LOG } from '../coins';
 import Bekjon from '../components/Bekjon';
@@ -13,6 +13,9 @@ import BarcodeApproveModal from '../components/BarcodeApproveModal';
 import BarcodeManualEntryModal, { type ManualProductInput } from '../components/BarcodeManualEntryModal';
 import { uzLatinToCyrl } from '../transliterate';
 
+// ============================================================
+// TYPES
+// ============================================================
 interface AnalysisResult {
     food_name: string;
     calories: number;
@@ -22,9 +25,177 @@ interface AnalysisResult {
     portion_g: number;
 }
 
+interface AnalysisResponse {
+    food_name: string;
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+    estimated_grams: number;
+}
+
+interface FoodLogEntry {
+    food_name: string;
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+}
+
+interface FavoritePer100g {
+    foodName: string;
+    kcalPer100g: number;
+    proteinPer100g: number;
+    fatPer100g: number;
+    carbsPer100g: number;
+    source: 'ai' | 'barcode';
+    sourceId: string | null;
+}
+
+// ============================================================
+// CONSTANTS
+// ============================================================
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000';
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
+const ANALYZE_TIMEOUT_MS = 45_000; // AI vision can be slow
+const SAVED_TOAST_MS = 2_200;
 
+// ============================================================
+// TYPE GUARDS
+// ============================================================
+function isFiniteNumber(v: unknown): v is number {
+    return typeof v === 'number' && Number.isFinite(v);
+}
+
+function isValidAnalysis(data: unknown): data is AnalysisResponse {
+    if (!data || typeof data !== 'object') return false;
+    const d = data as Record<string, unknown>;
+    return (
+        typeof d.food_name === 'string' &&
+        d.food_name.length > 0 &&
+        isFiniteNumber(d.calories) &&
+        isFiniteNumber(d.protein) &&
+        isFiniteNumber(d.fat) &&
+        isFiniteNumber(d.carbs) &&
+        isFiniteNumber(d.estimated_grams) &&
+        d.estimated_grams > 0
+    );
+}
+
+// ============================================================
+// API HELPERS
+// ============================================================
+async function analyzeImageAPI(
+    photo: File,
+    lang: string,
+    signal: AbortSignal
+): Promise<Result<AnalysisResponse | null>> {
+    try {
+        const apiLang = lang.startsWith('uz') ? 'uz' : lang;
+        const formData = new FormData();
+        formData.append('image', photo);
+
+        const res = await fetch(`${API_URL}/api/analyze-food?lang=${apiLang}`, {
+            method: 'POST',
+            body: formData,
+            signal,
+        });
+
+        let data: unknown = null;
+        try {
+            data = await res.json();
+        } catch {
+            return {
+                ok: false,
+                error: new NetworkError(`Serverdan yaroqsiz javob keldi (${res.status})`),
+            };
+        }
+
+        if (!res.ok) {
+            const msg =
+                data && typeof data === 'object' && 'error' in data && typeof (data as { error: unknown }).error === 'string'
+                    ? (data as { error: string }).error
+                    : `Server xatosi (${res.status})`;
+            return { ok: false, error: new NetworkError(msg) };
+        }
+
+        // Server "food not detected" ni bo'sh food_name bilan qaytaradi
+        if (data && typeof data === 'object' && !(data as Record<string, unknown>).food_name) {
+            return { ok: true, data: null };
+        }
+
+        if (!isValidAnalysis(data)) {
+            return {
+                ok: false,
+                error: new NetworkError('Server javobi kutilgan formatga mos emas'),
+            };
+        }
+
+        return { ok: true, data };
+    } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+            return { ok: false, error: new LokmaError('unknown', 'Bekor qilindi') };
+        }
+        return { ok: false, error: toLokmaError(err, 'network') };
+    }
+}
+
+async function insertFoodLog(
+    telegramId: number,
+    entry: FoodLogEntry
+): Promise<Result<null>> {
+    try {
+        const resp = await supabase.from('food_logs').insert({
+            user_id: telegramId,
+            ...entry,
+        });
+        if (resp.error) {
+            return {
+                ok: false,
+                error: new DatabaseError(resp.error.message, resp.error, {
+                    scope: 'scanner.insertFoodLog',
+                }),
+            };
+        }
+        return { ok: true, data: null };
+    } catch (err) {
+        return { ok: false, error: toLokmaError(err, 'database') };
+    }
+}
+
+async function saveFoodAndFavorite(
+    telegramId: number,
+    entry: FoodLogEntry,
+    fav: FavoritePer100g
+): Promise<Result<null>> {
+    const insertRes = await insertFoodLog(telegramId, entry);
+    if (!insertRes.ok) return insertRes;
+
+    // Coin va favorite fonda ishlaydi — biri xato bo'lsa log qilishga to'sqinlik qilmaydi
+    await addCoinsForLog();
+    try {
+        await upsertFavorite({
+            telegramId,
+            foodName: fav.foodName,
+            kcalPer100g: fav.kcalPer100g,
+            proteinPer100g: fav.proteinPer100g,
+            fatPer100g: fav.fatPer100g,
+            carbsPer100g: fav.carbsPer100g,
+            source: fav.source,
+            sourceId: fav.sourceId,
+            emoji: null,
+        });
+    } catch (err) {
+        // Favorite fail bo'lsa log muvaffaqiyatli bo'lgani muhimroq — sukut saqlaymiz
+        console.warn('[scanner] upsertFavorite failed', err);
+    }
+
+    return { ok: true, data: null };
+}
+
+// ============================================================
+// COMPONENT
+// ============================================================
 export default function Scanner() {
     const { t, lang } = useTranslation();
     const [photo, setPhoto] = useState<File | null>(null);
@@ -39,66 +210,198 @@ export default function Scanner() {
     const [pendingProduct, setPendingProduct] = useState<OFFProduct | null>(null);
     const [unknownBarcode, setUnknownBarcode] = useState<string | null>(null);
     const [prefill, setPrefill] = useState<{ name: string; brand?: string } | null>(null);
-    const galleryInputRef = useRef<HTMLInputElement>(null);
 
-    const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const galleryInputRef = useRef<HTMLInputElement>(null);
+    const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const analyzeAbortRef = useRef<AbortController | null>(null);
+    const photoUrlRef = useRef<string | null>(null);
+    const mountedRef = useRef(true);
+
+    // ------------------------------------------------------------
+    // Lifecycle & cleanup
+    // ------------------------------------------------------------
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+            if (analyzeAbortRef.current) analyzeAbortRef.current.abort();
+            if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
+        };
+    }, []);
+
+    const setPhotoWithUrl = useCallback((file: File | null) => {
+        // Eskisini revoke qilamiz — memory leak'ni oldini olish
+        if (photoUrlRef.current) {
+            URL.revokeObjectURL(photoUrlRef.current);
+            photoUrlRef.current = null;
+        }
+        if (file) {
+            const url = URL.createObjectURL(file);
+            photoUrlRef.current = url;
+            setPhoto(file);
+            setPhotoUrl(url);
+        } else {
+            setPhoto(null);
+            setPhotoUrl(null);
+        }
+    }, []);
+
+    const triggerSavedToast = useCallback((onExpire?: () => void) => {
+        setSaved(true);
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = setTimeout(() => {
+            if (!mountedRef.current) return;
+            setSaved(false);
+            onExpire?.();
+        }, SAVED_TOAST_MS);
+    }, []);
+
+    // ------------------------------------------------------------
+    // Handlers — photo pick / capture
+    // ------------------------------------------------------------
+    const handlePhotoSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        setPhoto(file);
-        setPhotoUrl(URL.createObjectURL(file));
+        setPhotoWithUrl(file);
         setResult(null);
         setSaved(false);
-    };
+    }, [setPhotoWithUrl]);
 
-    const handleCameraCapture = (file: File) => {
+    const handleCameraCapture = useCallback((file: File) => {
         setCameraOpen(false);
-        setPhoto(file);
-        setPhotoUrl(URL.createObjectURL(file));
+        setPhotoWithUrl(file);
         setResult(null);
         setSaved(false);
-    };
+    }, [setPhotoWithUrl]);
 
-    const handleAnalyze = async () => {
-        if (!photo) return;
+    const handleReset = useCallback(() => {
+        // Ketayotgan AI so'rovni bekor qilamiz
+        if (analyzeAbortRef.current) {
+            analyzeAbortRef.current.abort();
+            analyzeAbortRef.current = null;
+        }
+        setPhotoWithUrl(null);
+        setResult(null);
+        setSaved(false);
+        if (galleryInputRef.current) galleryInputRef.current.value = '';
+    }, [setPhotoWithUrl]);
+
+    // ------------------------------------------------------------
+    // AI analyze
+    // ------------------------------------------------------------
+    const handleAnalyze = useCallback(async () => {
+        if (!photo || loading) return;
+
+        // Oldingi so'rovni bekor qilamiz
+        if (analyzeAbortRef.current) analyzeAbortRef.current.abort();
+        const controller = new AbortController();
+        analyzeAbortRef.current = controller;
+        const timeoutId = setTimeout(() => controller.abort(), ANALYZE_TIMEOUT_MS);
+
         setLoading(true);
         try {
-            const apiLang = lang.startsWith('uz') ? 'uz' : lang;
-            const formData = new FormData();
-            formData.append('image', photo);
-            const res = await fetch(`${API_URL}/api/analyze-food?lang=${apiLang}`, {
-                method: 'POST',
-                body: formData,
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || t('scan_unknown_error'));
-            if (!data.food_name) {
-                await showAlert(t('scan_no_food'));
-                setLoading(false);
+            const res = await analyzeImageAPI(photo, lang, controller.signal);
+
+            if (!mountedRef.current) return;
+
+            if (!res.ok) {
+                // Bekor qilingan bo'lsa alert ko'rsatmaymiz
+                if (res.error.code === 'unknown' && res.error.message === 'Bekor qilindi') return;
+                await showAlert(`${t('error_prefix')}${res.error.message || t('scan_unknown_error')}`);
                 return;
             }
+
+            if (res.data === null) {
+                await showAlert(t('scan_no_food'));
+                return;
+            }
+
+            const data = res.data;
             const displayName = lang === 'uz-Cyrl' ? uzLatinToCyrl(data.food_name) : data.food_name;
             setResult({
                 food_name: displayName,
-                calories: data.calories,
-                protein: data.protein,
-                fat: data.fat,
-                carbs: data.carbs,
-                portion_g: data.estimated_grams,
+                calories: Math.max(0, Math.round(data.calories)),
+                protein: Math.max(0, Math.round(data.protein * 10) / 10),
+                fat: Math.max(0, Math.round(data.fat * 10) / 10),
+                carbs: Math.max(0, Math.round(data.carbs * 10) / 10),
+                portion_g: Math.max(1, Math.round(data.estimated_grams)),
             });
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : t('scan_unknown_error');
-            await showAlert(`${t('error_prefix')}${msg}`);
         } finally {
-            setLoading(false);
+            clearTimeout(timeoutId);
+            if (analyzeAbortRef.current === controller) analyzeAbortRef.current = null;
+            if (mountedRef.current) setLoading(false);
         }
-    };
+    }, [photo, loading, lang, t]);
 
-    async function handleBarcodeDetected(barcode: string) {
+    // ------------------------------------------------------------
+    // Save AI-analyzed food
+    // ------------------------------------------------------------
+    const handleSave = useCallback(async () => {
+        if (!result || saving) return;
+        setSaving(true);
+        try {
+            const telegramId = getTelegramId();
+            if (!telegramId) {
+                await showAlert(`${t('error_prefix')}${t('scan_tg_missing')}`);
+                return;
+            }
+
+            const capitalizedName = result.food_name.charAt(0).toUpperCase() + result.food_name.slice(1);
+            const foodNameWithPortion = `${capitalizedName} (${result.portion_g}g)`;
+
+            // Per-100g nisbatni hisoblash (portion_g > 0 kafolatlangan)
+            const per100Ratio = 100 / result.portion_g;
+
+            const saveRes = await saveFoodAndFavorite(
+                telegramId,
+                {
+                    food_name: foodNameWithPortion,
+                    calories: result.calories,
+                    protein: result.protein,
+                    fat: result.fat,
+                    carbs: result.carbs,
+                },
+                {
+                    foodName: capitalizedName,
+                    kcalPer100g: Math.max(0, Math.round(result.calories * per100Ratio)),
+                    proteinPer100g: Math.max(0, +(result.protein * per100Ratio).toFixed(1)),
+                    fatPer100g: Math.max(0, +(result.fat * per100Ratio).toFixed(1)),
+                    carbsPer100g: Math.max(0, +(result.carbs * per100Ratio).toFixed(1)),
+                    source: 'ai',
+                    sourceId: null,
+                }
+            );
+
+            if (!mountedRef.current) return;
+
+            if (!saveRes.ok) {
+                await showAlert(`${t('error_prefix')}${saveRes.error.message || t('scan_save_error')}`);
+                return;
+            }
+
+            triggerSavedToast(() => handleReset());
+        } finally {
+            if (mountedRef.current) setSaving(false);
+        }
+    }, [result, saving, t, triggerSavedToast, handleReset]);
+
+    // ------------------------------------------------------------
+    // Barcode flow
+    // ------------------------------------------------------------
+    const handleBarcodeDetected = useCallback(async (barcode: string) => {
         setScannerOpen(false);
         setLookingUp(true);
         try {
             const telegramId = getTelegramId() ?? undefined;
-            const p = await lookupBarcode(barcode, lang, telegramId);
+            const res = await lookupBarcode(barcode, lang, telegramId);
+            if (!mountedRef.current) return;
+
+            if (!res.ok) {
+                await showAlert(`${t('error_prefix')}${res.error.message || t('scan_save_error')}`);
+                return;
+            }
+            const p = res.data;
             if (!p) {
                 setPrefill(null);
                 setUnknownBarcode(barcode);
@@ -111,165 +414,139 @@ export default function Scanner() {
             }
             setPendingProduct(p);
         } catch (err) {
-            const msg = err instanceof Error ? err.message : t('scan_save_error');
-            await showAlert(`${t('error_prefix')}${msg}`);
+            if (!mountedRef.current) return;
+            const lokma = toLokmaError(err, 'network');
+            await showAlert(`${t('error_prefix')}${lokma.message || t('scan_save_error')}`);
         } finally {
-            setLookingUp(false);
+            if (mountedRef.current) setLookingUp(false);
         }
-    }
+    }, [lang, t]);
 
-    async function handleApproveProduct(portionG: number) {
-        if (!pendingProduct) return;
+    const handleApproveProduct = useCallback(async (portionG: number) => {
+        if (!pendingProduct || saving) return;
         setSaving(true);
         try {
             const telegramId = getTelegramId();
-            if (!telegramId) throw new Error(t('scan_tg_missing'));
-            const ratio = portionG / 100;
-            const fullName = pendingProduct.brand ? `${pendingProduct.name} · ${pendingProduct.brand}` : pendingProduct.name;
-            const { error } = await supabase.from('food_logs').insert({
-                user_id: telegramId,
-                food_name: `${fullName} (${portionG}g)`,
-                calories: Math.round(pendingProduct.kcal_per_100g * ratio),
-                protein: Math.round(pendingProduct.protein_per_100g * ratio * 10) / 10,
-                fat: Math.round(pendingProduct.fat_per_100g * ratio * 10) / 10,
-                carbs: Math.round(pendingProduct.carbs_per_100g * ratio * 10) / 10,
-            });
-            if (error) throw error;
-            await addCoinsForLog();
+            if (!telegramId) {
+                await showAlert(`${t('error_prefix')}${t('scan_tg_missing')}`);
+                return;
+            }
 
-            // Sevimlilarga avtomatik qo'shish
-            await upsertFavorite({
+            const ratio = portionG / 100;
+            const fullName = pendingProduct.brand
+                ? `${pendingProduct.name} · ${pendingProduct.brand}`
+                : pendingProduct.name;
+
+            const saveRes = await saveFoodAndFavorite(
                 telegramId,
-                foodName: fullName,
-                kcalPer100g: pendingProduct.kcal_per_100g,
-                proteinPer100g: pendingProduct.protein_per_100g,
-                fatPer100g: pendingProduct.fat_per_100g,
-                carbsPer100g: pendingProduct.carbs_per_100g,
-                source: 'barcode',
-                sourceId: pendingProduct.barcode ?? null,
-                emoji: null,
-            });
+                {
+                    food_name: `${fullName} (${portionG}g)`,
+                    calories: Math.max(0, Math.round(pendingProduct.kcal_per_100g * ratio)),
+                    protein: Math.max(0, Math.round(pendingProduct.protein_per_100g * ratio * 10) / 10),
+                    fat: Math.max(0, Math.round(pendingProduct.fat_per_100g * ratio * 10) / 10),
+                    carbs: Math.max(0, Math.round(pendingProduct.carbs_per_100g * ratio * 10) / 10),
+                },
+                {
+                    foodName: fullName,
+                    kcalPer100g: pendingProduct.kcal_per_100g,
+                    proteinPer100g: pendingProduct.protein_per_100g,
+                    fatPer100g: pendingProduct.fat_per_100g,
+                    carbsPer100g: pendingProduct.carbs_per_100g,
+                    source: 'barcode',
+                    sourceId: pendingProduct.barcode ?? null,
+                }
+            );
+
+            if (!mountedRef.current) return;
+
+            if (!saveRes.ok) {
+                await showAlert(`${t('error_prefix')}${saveRes.error.message || t('scan_save_error')}`);
+                return;
+            }
 
             setPendingProduct(null);
-            setSaved(true);
-            setTimeout(() => setSaved(false), 2200);
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : t('scan_save_error');
-            await showAlert(`${t('error_prefix')}${msg}`);
+            triggerSavedToast();
         } finally {
-            setSaving(false);
+            if (mountedRef.current) setSaving(false);
         }
-    }
+    }, [pendingProduct, saving, t, triggerSavedToast]);
 
-    async function handleManualSubmit(input: ManualProductInput) {
-        if (!unknownBarcode) return;
+    const handleManualSubmit = useCallback(async (input: ManualProductInput) => {
+        if (!unknownBarcode || saving) return;
         setSaving(true);
         try {
             const telegramId = getTelegramId();
-            if (!telegramId) throw new Error(t('scan_tg_missing'));
-            const result = await saveUserProduct({
-                barcode: unknownBarcode,
-                name: input.name,
-                brand: input.brand,
-                kcal_per_100g: input.kcal,
-                protein_per_100g: input.protein,
-                fat_per_100g: input.fat,
-                carbs_per_100g: input.carbs,
-            }, telegramId);
-            if (!result) throw new Error(t('bc_save_failed'));
+            if (!telegramId) {
+                await showAlert(`${t('error_prefix')}${t('scan_tg_missing')}`);
+                return;
+            }
+
+            // Foydalanuvchi mahsulotini saqlash (crowd-sourced OFF cache)
+            let productSaveFailed = false;
+            try {
+                const saveResult = await saveUserProduct({
+                    barcode: unknownBarcode,
+                    name: input.name,
+                    brand: input.brand,
+                    kcal_per_100g: input.kcal,
+                    protein_per_100g: input.protein,
+                    fat_per_100g: input.fat,
+                    carbs_per_100g: input.carbs,
+                }, telegramId);
+                if (!saveResult.ok) productSaveFailed = true;
+            } catch (err) {
+                console.warn('[scanner] saveUserProduct failed', err);
+                productSaveFailed = true;
+            }
+
+            if (productSaveFailed) {
+                if (mountedRef.current) {
+                    await showAlert(`${t('error_prefix')}${t('bc_save_failed')}`);
+                }
+                return;
+            }
 
             const ratio = input.portion / 100;
             const fullName = input.brand ? `${input.name} · ${input.brand}` : input.name;
-            const { error } = await supabase.from('food_logs').insert({
-                user_id: telegramId,
-                food_name: `${fullName} (${input.portion}g)`,
-                calories: Math.round(input.kcal * ratio),
-                protein: Math.round(input.protein * ratio * 10) / 10,
-                fat: Math.round(input.fat * ratio * 10) / 10,
-                carbs: Math.round(input.carbs * ratio * 10) / 10,
-            });
-            if (error) throw error;
-            await addCoinsForLog();
 
-            // Sevimlilarga avtomatik qo'shish
-            await upsertFavorite({
+            const saveRes = await saveFoodAndFavorite(
                 telegramId,
-                foodName: fullName,
-                kcalPer100g: input.kcal,
-                proteinPer100g: input.protein,
-                fatPer100g: input.fat,
-                carbsPer100g: input.carbs,
-                source: 'barcode',
-                sourceId: unknownBarcode,
-                emoji: null,
-            });
+                {
+                    food_name: `${fullName} (${input.portion}g)`,
+                    calories: Math.max(0, Math.round(input.kcal * ratio)),
+                    protein: Math.max(0, Math.round(input.protein * ratio * 10) / 10),
+                    fat: Math.max(0, Math.round(input.fat * ratio * 10) / 10),
+                    carbs: Math.max(0, Math.round(input.carbs * ratio * 10) / 10),
+                },
+                {
+                    foodName: fullName,
+                    kcalPer100g: input.kcal,
+                    proteinPer100g: input.protein,
+                    fatPer100g: input.fat,
+                    carbsPer100g: input.carbs,
+                    source: 'barcode',
+                    sourceId: unknownBarcode,
+                }
+            );
+
+            if (!mountedRef.current) return;
+
+            if (!saveRes.ok) {
+                await showAlert(`${t('error_prefix')}${saveRes.error.message || t('scan_save_error')}`);
+                return;
+            }
 
             setUnknownBarcode(null);
             setPrefill(null);
-            setSaved(true);
-            setTimeout(() => setSaved(false), 2200);
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : t('scan_save_error');
-            await showAlert(`${t('error_prefix')}${msg}`);
+            triggerSavedToast();
         } finally {
-            setSaving(false);
+            if (mountedRef.current) setSaving(false);
         }
-    }
+    }, [unknownBarcode, saving, t, triggerSavedToast]);
 
-    const handleReset = () => {
-        setPhoto(null);
-        setPhotoUrl(null);
-        setResult(null);
-        setSaved(false);
-        if (galleryInputRef.current) galleryInputRef.current.value = '';
-    };
-
-    const handleSave = async () => {
-        if (!result) return;
-        setSaving(true);
-        try {
-            const telegramId = getTelegramId();
-            if (!telegramId) throw new Error(t('scan_tg_missing'));
-            const capitalizedName = result.food_name.charAt(0).toUpperCase() + result.food_name.slice(1);
-            const foodNameWithPortion = `${capitalizedName} (${result.portion_g}g)`;
-            const { error } = await supabase.from('food_logs').insert({
-                user_id: telegramId,
-                food_name: foodNameWithPortion,
-                calories: result.calories,
-                protein: result.protein,
-                fat: result.fat,
-                carbs: result.carbs,
-            });
-            if (error) throw error;
-
-            await addCoinsForLog();
-
-            // Sevimlilarga avtomatik qo'shish (AI tahlil natijasi)
-            if (result.portion_g > 0) {
-                const per100Ratio = 100 / result.portion_g;
-                await upsertFavorite({
-                    telegramId,
-                    foodName: capitalizedName,
-                    kcalPer100g: Math.round(result.calories * per100Ratio),
-                    proteinPer100g: +(result.protein * per100Ratio).toFixed(1),
-                    fatPer100g: +(result.fat * per100Ratio).toFixed(1),
-                    carbsPer100g: +(result.carbs * per100Ratio).toFixed(1),
-                    source: 'ai',
-                    sourceId: null,
-                    emoji: null,
-                });
-            }
-
-            setSaved(true);
-            setTimeout(() => handleReset(), 2200);
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : t('scan_save_error');
-            await showAlert(`${t('error_prefix')}${msg}`);
-        } finally {
-            setSaving(false);
-        }
-    };
-
+    // ------------------------------------------------------------
+    // RENDER
+    // ------------------------------------------------------------
     return (
         <div className="min-h-screen pb-28" style={{ background: 'var(--color-bg)' }}>
             <div className="max-w-md mx-auto px-5 pt-7">

@@ -1,22 +1,47 @@
+// skins.ts
+// ============================================================
+// LOKMA — Bekjon skin catalog (premium refactor)
+// - Immutable data (Object.freeze + as const)
+// - Pre-indexed Map lookups (O(1) getSkinById / getSkinsByCategory)
+// - DRY i18n picker (extract shared logic)
+// - Type-safe convenience helpers
+// - Data integrity check (dev-only warning)
+// ============================================================
+
 import { uzLatinToCyrl } from './transliterate';
 import type { Lang } from './i18n';
 
+// ============================================================
+// TYPES
+// ============================================================
 export type SkinCategory = 'national' | 'sport' | 'universal' | 'seasonal';
 
 export interface Skin {
-    id: string;
-    name_uz: string;
-    name_ru: string;
-    name_en: string;
-    emoji: string;
-    category: SkinCategory;
-    price: number;
-    description: string;     // uz-Latn (eski — backward compat)
-    description_ru: string;
-    description_en: string;
+    readonly id: string;
+    readonly name_uz: string;
+    readonly name_ru: string;
+    readonly name_en: string;
+    readonly emoji: string;
+    readonly category: SkinCategory;
+    readonly price: number;
+    /** uz-Latn description (eski nom — backward compat) */
+    readonly description: string;
+    readonly description_ru: string;
+    readonly description_en: string;
 }
 
-export const SKINS: Skin[] = [
+export interface CategoryInfo {
+    /** uz-Latn label (eski nom — backward compat) */
+    readonly label: string;
+    readonly label_ru: string;
+    readonly label_en: string;
+    readonly icon: string;
+}
+
+// ============================================================
+// DATA — immutable
+// ============================================================
+export const SKINS: ReadonlyArray<Skin> = Object.freeze([
     // Milliy (6 ta)
     { id: 'dopi', name_uz: "Chust do'ppisi", name_ru: 'Чустская тюбетейка', name_en: 'Chust skullcap', emoji: '🎩', category: 'national', price: 50, description: "An'anaviy do'ppi", description_ru: 'Традиционная тюбетейка', description_en: 'Traditional skullcap' },
     { id: 'telpak', name_uz: 'Telpak', name_ru: 'Тельпак', name_en: 'Telpak', emoji: '🪖', category: 'national', price: 80, description: 'Qishki teri telpak', description_ru: 'Зимняя меховая шапка', description_en: 'Winter fur hat' },
@@ -45,47 +70,111 @@ export const SKINS: Skin[] = [
     { id: 'newyear', name_uz: 'Archa', name_ru: 'Ёлка', name_en: 'Christmas tree', emoji: '🎄', category: 'seasonal', price: 200, description: 'Yangi yil', description_ru: 'Новый год', description_en: 'New Year' },
     { id: 'ramadan', name_uz: 'Ramazon oyi', name_ru: 'Месяц Рамадан', name_en: 'Ramadan', emoji: '🌙', category: 'seasonal', price: 250, description: 'Muqaddas oy', description_ru: 'Священный месяц', description_en: 'Holy month' },
     { id: 'cake', name_uz: "Tug'ilgan kun", name_ru: 'День рождения', name_en: 'Birthday', emoji: '🎂', category: 'seasonal', price: 180, description: 'Bayramga', description_ru: 'К празднику', description_en: 'For celebration' },
-];
+].map(s => Object.freeze(s)) as Skin[]);
 
-export interface CategoryInfo {
-    label: string;       // uz-Latn (eski)
-    label_ru: string;
-    label_en: string;
-    icon: string;
+export const CATEGORIES: Readonly<Record<SkinCategory, CategoryInfo>> = Object.freeze({
+    national: Object.freeze({ label: 'Milliy', label_ru: 'Национальные', label_en: 'National', icon: '🏛️' }),
+    sport: Object.freeze({ label: 'Sport', label_ru: 'Спорт', label_en: 'Sports', icon: '⚽' }),
+    universal: Object.freeze({ label: 'Universal', label_ru: 'Универсальные', label_en: 'Universal', icon: '✨' }),
+    seasonal: Object.freeze({ label: 'Mavsumiy', label_ru: 'Сезонные', label_en: 'Seasonal', icon: '🎉' }),
+});
+
+export const CATEGORY_ORDER: ReadonlyArray<SkinCategory> = Object.freeze([
+    'national',
+    'sport',
+    'universal',
+    'seasonal',
+]);
+
+// ============================================================
+// PRE-INDEXED LOOKUPS — module-level, one-time build
+// ============================================================
+const SKINS_BY_ID: ReadonlyMap<string, Skin> = new Map(SKINS.map(s => [s.id, s]));
+
+const SKINS_BY_CATEGORY: ReadonlyMap<SkinCategory, ReadonlyArray<Skin>> = new Map(
+    CATEGORY_ORDER.map(cat => [cat, Object.freeze(SKINS.filter(s => s.category === cat))])
+);
+
+// ============================================================
+// DEV-ONLY DATA INTEGRITY CHECK
+// ============================================================
+if (import.meta.env.DEV) {
+    // Duplicate ID check
+    const ids = new Set<string>();
+    for (const s of SKINS) {
+        if (ids.has(s.id)) console.error(`[skins] Duplicate id: ${s.id}`);
+        ids.add(s.id);
+        if (s.price < 0) console.error(`[skins] Negative price: ${s.id}`);
+        if (!s.name_uz || !s.name_ru || !s.name_en) console.warn(`[skins] Missing name locale: ${s.id}`);
+        if (!s.description || !s.description_ru || !s.description_en) console.warn(`[skins] Missing description locale: ${s.id}`);
+    }
 }
 
-export const CATEGORIES: Record<SkinCategory, CategoryInfo> = {
-    national: { label: 'Milliy', label_ru: 'Национальные', label_en: 'National', icon: '🏛️' },
-    sport: { label: 'Sport', label_ru: 'Спорт', label_en: 'Sports', icon: '⚽' },
-    universal: { label: 'Universal', label_ru: 'Универсальные', label_en: 'Universal', icon: '✨' },
-    seasonal: { label: 'Mavsumiy', label_ru: 'Сезонные', label_en: 'Seasonal', icon: '🎉' },
+// ============================================================
+// CONSTANTS
+// ============================================================
+export const TOTAL_SKINS_COUNT = SKINS.length;
+
+// ============================================================
+// LOOKUP HELPERS — O(1)
+// ============================================================
+export function getSkinById(id: string | null | undefined): Skin | null {
+    if (!id) return null;
+    return SKINS_BY_ID.get(id) ?? null;
+}
+
+export function getSkinsByCategory(category: SkinCategory): ReadonlyArray<Skin> {
+    return SKINS_BY_CATEGORY.get(category) ?? [];
+}
+
+export function isValidSkinId(id: string | null | undefined): id is string {
+    return typeof id === 'string' && SKINS_BY_ID.has(id);
+}
+
+export function getSkinPrice(id: string | null | undefined): number | null {
+    const skin = getSkinById(id);
+    return skin ? skin.price : null;
+}
+
+// ============================================================
+// i18n — DRY picker
+// ============================================================
+type Localized = {
+    _uz: string;
+    _ru: string;
+    _en: string;
 };
 
-export function getSkinById(id: string | null): Skin | null {
-    if (!id) return null;
-    return SKINS.find(s => s.id === id) || null;
+/** Berilgan uz-Latn/ru/en tuple'dan tanlangan lang uchun string qaytaradi. */
+function pickLocale(v: Localized, lang: Lang): string {
+    switch (lang) {
+        case 'ru': return v._ru;
+        case 'en': return v._en;
+        case 'uz-Cyrl': return uzLatinToCyrl(v._uz);
+        case 'uz-Latn':
+        default: return v._uz;
+    }
 }
 
-// === i18n helper'lar ===
-
+// ============================================================
+// PUBLIC i18n HELPERS
+// ============================================================
 export function getSkinName(skin: Skin, lang: Lang): string {
-    if (lang === 'ru') return skin.name_ru;
-    if (lang === 'en') return skin.name_en;
-    if (lang === 'uz-Cyrl') return uzLatinToCyrl(skin.name_uz);
-    return skin.name_uz;
+    return pickLocale({ _uz: skin.name_uz, _ru: skin.name_ru, _en: skin.name_en }, lang);
 }
 
 export function getSkinDescription(skin: Skin, lang: Lang): string {
-    if (lang === 'ru') return skin.description_ru;
-    if (lang === 'en') return skin.description_en;
-    if (lang === 'uz-Cyrl') return uzLatinToCyrl(skin.description);
-    return skin.description;
+    return pickLocale(
+        { _uz: skin.description, _ru: skin.description_ru, _en: skin.description_en },
+        lang
+    );
 }
 
 export function getCategoryLabel(cat: SkinCategory, lang: Lang): string {
     const info = CATEGORIES[cat];
-    if (lang === 'ru') return info.label_ru;
-    if (lang === 'en') return info.label_en;
-    if (lang === 'uz-Cyrl') return uzLatinToCyrl(info.label);
-    return info.label;
+    return pickLocale({ _uz: info.label, _ru: info.label_ru, _en: info.label_en }, lang);
+}
+
+export function getCategoryIcon(cat: SkinCategory): string {
+    return CATEGORIES[cat].icon;
 }

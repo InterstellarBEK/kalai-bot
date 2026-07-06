@@ -1,7 +1,14 @@
-import { useState, useEffect } from 'react';
+// src/FoodSearch.tsx
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from './supabase';
-import { getTelegramId, showAlert } from './telegram';
+import { supabase, toLokmaError } from './supabase';
+import {
+    getTelegramId,
+    showAlert,
+    hapticImpact,
+    hapticNotify,
+    hapticSelection,
+} from './telegram';
 import { addCoinsForLog, COINS_PER_LOG } from './coins';
 import Bekjon from './components/Bekjon';
 import { useTranslation } from './i18n';
@@ -15,11 +22,19 @@ import {
     type FavoriteFood,
 } from './lib/favorites';
 
-
+// ===== Constants =====
 const DEFAULT_PORTIONS = [50, 100, 150, 200, 300];
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
+const SAVED_TOAST_MS = 2000;
+const GLOBAL_SEARCH_LIMIT = 10;
+const MIN_GLOBAL_RESULTS = 3;
+const LOCAL_SEARCH_CAP = 7;
+const LOCAL_VIEW_CAP = 50;
+const SWIPE_REVEAL_PX = 130;
+const SWIPE_TRIGGER_PX = 50;
 
 type MealKey = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+type TabKey = 'search' | 'favorites' | 'local';
 
 const MEAL_EMOJI: Record<MealKey, string> = {
     breakfast: '🌅',
@@ -35,6 +50,20 @@ const MEAL_LABEL_KEY: Record<MealKey, string> = {
     snack: 'meal_snack',
 };
 
+const PORTION_NAME_KEY_MAP: Record<string, string> = {
+    'kichik porsiya': 'p_small',
+    "o'rta porsiya": 'p_medium',
+    'katta porsiya': 'p_large',
+    'oilaviy lagan': 'p_family',
+};
+
+const PIECE_SIZE_KEY_MAP: Record<string, string> = {
+    'kichik': 'p_piece_small',
+    "o'rta": 'p_piece_medium',
+    'katta': 'p_piece_large',
+};
+
+// ===== Types =====
 interface FoodSearchProps {
     initialMealType?: MealKey | null;
     onMealConsumed?: () => void;
@@ -70,6 +99,45 @@ interface LocalFoodRow {
     portions: Portion[];
     emoji: string;
 }
+
+interface GlobalFoodRow {
+    id: number | string;
+    name_uz: string;
+    calories: number;
+    protein: number;
+    fat: number;
+    carbs: number;
+}
+
+// ===== Helpers =====
+/** Wildcards `%` va `_` `\`ni escape qiladi — ilike xato natija bermasligi uchun. */
+function escapeLikePattern(q: string): string {
+    return q.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+}
+
+/** Porsiya nomini i18n orqali tarjima qilish — takrorlanuvchi mantiq. */
+function makeDisplayPortionName(
+    t: (k: string) => string,
+    lang: string
+): (name?: string) => string | undefined {
+    return (name?: string): string | undefined => {
+        if (!name) return undefined;
+        const lower = name.toLowerCase().trim();
+        if (PORTION_NAME_KEY_MAP[lower]) return t(PORTION_NAME_KEY_MAP[lower]);
+        // "1 dona", "1 dona kichik", "2 dona" kabi shablonlar
+        const m = lower.match(/^(\d+)\s+dona(?:\s+(kichik|o'rta|katta))?$/);
+        if (m) {
+            const n = m[1];
+            const size = m[2];
+            if (!size) return `${n} ${t('p_piece')}`;
+            const sizeKey = PIECE_SIZE_KEY_MAP[size];
+            return sizeKey ? `${n} ${t(sizeKey)}` : `${n} ${t('p_piece')}`;
+        }
+        if (lang === 'uz-Cyrl') return uzLatinToCyrl(name);
+        return name;
+    };
+}
+
 // ===== Premium taom ikonlari (emoji'ga moslashtirilgan) =====
 function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
     if (!emoji) return null;
@@ -82,9 +150,7 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
         strokeLinecap: 'round' as const,
         strokeLinejoin: 'round' as const,
     };
-    // Emoji → SVG mapping
     const map: Record<string, ReactElement> = {
-        // 🍲 Osh / shurva / lag'mon — likobcha
         '🍲': (
             <svg {...common}>
                 <ellipse cx="12" cy="11" rx="9" ry="2.2" fill="#F59E0B" fillOpacity="0.25" stroke="#F59E0B" />
@@ -92,14 +158,12 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <path d="M8 7c0-1 1-1.5 1-2.5M12 6.5c0-1 1-1.5 1-2.5M16 7c0-1 1-1.5 1-2.5" stroke="#92400E" />
             </svg>
         ),
-        // 🍗 Tandir kabob / tovuq — drumstick
         '🍗': (
             <svg {...common}>
                 <path d="M14.5 4.5a4 4 0 0 0-6.5 4.8L4 13.5a2 2 0 1 0 2.8 2.8l4.2-4.2a4 4 0 0 0 5-7.6z" fill="#F59E0B" fillOpacity="0.35" stroke="#9A3412" />
                 <path d="M5 14l-1 2M6 15l-2 1" stroke="#9A3412" />
             </svg>
         ),
-        // 🥟 Manti / chuchvara — dumpling
         '🥟': (
             <svg {...common}>
                 <path d="M4 14c0-4 3.5-7 8-7s8 3 8 7c0 .8-.4 1.5-1.2 1.5H5.2C4.4 15.5 4 14.8 4 14z" fill="#FEF3C7" stroke="#92400E" />
@@ -107,7 +171,6 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <path d="M5 15.5h14l-1 2H6z" fill="#FCD34D" stroke="#92400E" />
             </svg>
         ),
-        // 🥘 Somsa / kuza / palov — pan
         '🥘': (
             <svg {...common}>
                 <path d="M3 11h18l-1 5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3l-1-5z" fill="#FCD34D" fillOpacity="0.5" stroke="#92400E" />
@@ -117,7 +180,6 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <path d="M3 11l-1.5-2M21 11l1.5-2" stroke="#92400E" />
             </svg>
         ),
-        // 🍞 Non — bread
         '🍞': (
             <svg {...common}>
                 <path d="M4 10c0-3 2-5 5-5h6c3 0 5 2 5 5v2H4v-2z" fill="#FCD34D" stroke="#92400E" />
@@ -125,14 +187,12 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <path d="M8 8v3M12 7.5v3.5M16 8v3" stroke="#92400E" />
             </svg>
         ),
-        // 🍜 Lag'mon / noodles
         '🍜': (
             <svg {...common}>
                 <path d="M3 11h18a9 9 0 0 1-18 0z" fill="#FCD34D" fillOpacity="0.4" stroke="#92400E" />
                 <path d="M6 11c.5-2 1.5-3 2-2s-.5 2 0 3M11 11c.5-2 1.5-3 2-2s-.5 2 0 3M16 11c.5-2 1.5-3 2-2s-.5 2 0 3" stroke="#9A3412" />
             </svg>
         ),
-        // 🍚 Guruch — rice bowl
         '🍚': (
             <svg {...common}>
                 <path d="M3 11h18a9 9 0 0 1-18 0z" fill="#F1F5F9" stroke="#64748B" />
@@ -143,7 +203,6 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <circle cx="14" cy="15.5" r=".7" fill="#64748B" />
             </svg>
         ),
-        // ☕ Choy
         '☕': (
             <svg {...common}>
                 <path d="M4 8h13v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8z" fill="#FCD34D" fillOpacity="0.3" stroke="#92400E" />
@@ -151,7 +210,6 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <path d="M8 5c0-1 1-1 1-2M11 5c0-1 1-1 1-2M14 5c0-1 1-1 1-2" stroke="#9A3412" />
             </svg>
         ),
-        // 🥗 Salat
         '🥗': (
             <svg {...common}>
                 <path d="M3 11h18a9 9 0 0 1-18 0z" fill="#86EFAC" fillOpacity="0.4" stroke="#15803D" />
@@ -160,14 +218,12 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <path d="M11 7c.5-1 1.5-1.5 2.5-1" stroke="#15803D" />
             </svg>
         ),
-        // 🥩 Go'sht
         '🥩': (
             <svg {...common}>
                 <path d="M5 9c1-3 4-5 7-5s6 2 7 5-1 7-4 9-8 1-9-1-2-5-1-8z" fill="#EF4444" fillOpacity="0.35" stroke="#991B1B" />
                 <path d="M9 9c1-1 3-2 5-1" stroke="#FCD34D" strokeWidth="2" />
             </svg>
         ),
-        // 🐟 Baliq
         '🐟': (
             <svg {...common}>
                 <path d="M3 12c0-3 4-6 9-6s8 3 8 6-3 6-8 6-9-3-9-6z" fill="#7DD3FC" fillOpacity="0.4" stroke="#0369A1" />
@@ -175,7 +231,6 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <circle cx="7" cy="11" r=".8" fill="#0369A1" />
             </svg>
         ),
-        // 🥛 Sut
         '🥛': (
             <svg {...common}>
                 <path d="M7 4h10l-1 3H8L7 4z" fill="#F1F5F9" stroke="#64748B" />
@@ -183,26 +238,22 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <path d="M9 13h6" stroke="#64748B" />
             </svg>
         ),
-        // 🥚 Tuxum
         '🥚': (
             <svg {...common}>
                 <ellipse cx="12" cy="13" rx="6" ry="8" fill="#FEF3C7" stroke="#92400E" />
             </svg>
         ),
-        // 🍎 Olma
         '🍎': (
             <svg {...common}>
                 <path d="M12 6c-1-2-3-2.5-5-1.5s-2 4-1 7 4 7 6 7 5-4 6-7-1-6-3-7-2 .5-3 1.5z" fill="#EF4444" fillOpacity="0.45" stroke="#991B1B" />
                 <path d="M12 6V4c0-1 1-2 2-2" stroke="#15803D" />
             </svg>
         ),
-        // 🍌 Banan
         '🍌': (
             <svg {...common}>
                 <path d="M5 6c0 8 5 13 13 13 2 0 2-2 1-2-5 0-10-5-10-10 0-1.5-2-1.5-4-1z" fill="#FCD34D" fillOpacity="0.5" stroke="#92400E" />
             </svg>
         ),
-        // 🧀 Pishloq
         '🧀': (
             <svg {...common}>
                 <path d="M3 11l9-5 9 5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6z" fill="#FCD34D" fillOpacity="0.5" stroke="#92400E" />
@@ -211,14 +262,12 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
                 <circle cx="16" cy="16" r=".8" fill="#92400E" />
             </svg>
         ),
-        // 🍅 Pomidor
         '🍅': (
             <svg {...common}>
                 <circle cx="12" cy="13" r="7" fill="#EF4444" fillOpacity="0.5" stroke="#991B1B" />
                 <path d="M9 6l1 2 2-1 2 1 1-2" fill="#15803D" stroke="#15803D" />
             </svg>
         ),
-        // 🥒 Bodring
         '🥒': (
             <svg {...common}>
                 <path d="M16 4c2 0 4 2 4 4s-8 12-12 12-4-2-4-4S14 4 16 4z" fill="#86EFAC" fillOpacity="0.5" stroke="#15803D" />
@@ -227,7 +276,6 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
     };
     return (
         map[emoji] || (
-            // Default — generic bowl
             <svg {...common}>
                 <ellipse cx="12" cy="11" rx="9" ry="2" fill="#F59E0B" fillOpacity="0.2" stroke="#F59E0B" />
                 <path d="M3 11c0 4 4 8 9 8s9-4 9-8" fill="#FCD34D" fillOpacity="0.3" stroke="#92400E" />
@@ -236,43 +284,13 @@ function FoodIcon({ emoji, size = 22 }: { emoji?: string; size?: number }) {
     );
 }
 
+// =================================================================
+// FoodSearch — asosiy komponent
+// =================================================================
 export default function FoodSearch({ initialMealType = null, onMealConsumed }: FoodSearchProps = {}) {
     const { t, lang } = useTranslation();
 
-    // Dashboard'dan kelgan meal type (prefill) — yoki user qo'lda tanlasa
     const [currentMealType, setCurrentMealType] = useState<MealKey | null>(initialMealType);
-
-
-    // Lang-aware nom tanlash
-    function displayName(food: Food, nameRu?: string | null): string {
-        if (lang === 'ru' && nameRu) return nameRu;
-        if (lang === 'uz-Cyrl') return uzLatinToCyrl(food.name_uz);
-        return food.name_uz;
-    }
-    function displayPortionName(name?: string): string | undefined {
-        if (!name) return undefined;
-        const lower = name.toLowerCase().trim();
-        // Mahalliy porsiya nomlarini i18n kalitiga map qilish
-        const map: Record<string, string> = {
-            'kichik porsiya': 'p_small',
-            "o'rta porsiya": 'p_medium',
-            'katta porsiya': 'p_large',
-            'oilaviy lagan': 'p_family',
-        };
-        if (map[lower]) return t(map[lower]);
-        // "1 dona", "1 dona kichik", "2 dona" kabi shablonlar
-        const m = lower.match(/^(\d+)\s+dona(?:\s+(kichik|o'rta|katta))?$/);
-        if (m) {
-            const n = m[1];
-            const size = m[2];
-            if (!size) return `${n} ${t('p_piece')}`;
-            const sizeKey = size === 'kichik' ? 'p_piece_small' : size === "o'rta" ? 'p_piece_medium' : 'p_piece_large';
-            return `${n} ${t(sizeKey)}`;
-        }
-        if (lang === 'uz-Cyrl') return uzLatinToCyrl(name);
-        return name;
-    }
-
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<Food[]>([]);
     const [portions, setPortions] = useState<Record<string, number>>({});
@@ -282,15 +300,59 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
     const [savedFood, setSavedFood] = useState<{ name: string; grams: number; cal: number } | null>(null);
     const [localCache, setLocalCache] = useState<LocalFoodRow[]>([]);
 
-    // === Tab tizimi (Faza 2 mukammal) ===
-    const [activeTab, setActiveTab] = useState<'search' | 'favorites' | 'local'>('search');
+    // === Tab tizimi ===
+    const [activeTab, setActiveTab] = useState<TabKey>('search');
     const [favorites, setFavorites] = useState<FavoriteFood[]>([]);
     const [loadingFavs, setLoadingFavs] = useState(false);
     const [favActionId, setFavActionId] = useState<number | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
     const [localQuery, setLocalQuery] = useState('');
 
-    // Dashboard'dan kelgan meal type prefill — har gal yangi event kelsa
+    // === Refs: race guards + cleanup ===
+    const telegramIdRef = useRef<number | null>(null);
+    const aliveRef = useRef(true);
+    const searchSeqRef = useRef(0);
+    const toastTimerRef = useRef<number | null>(null);
+    const favInflightRef = useRef<Set<number>>(new Set());
+    const tRef = useRef(t);
+    tRef.current = t;
+
+    // Telegram ID bir marta olinadi (getTelegramId har chaqiruvda WebApp o'qiydi)
+    if (telegramIdRef.current === null) {
+        telegramIdRef.current = getTelegramId();
+    }
+
+    // ===== Localized display helpers =====
+    const displayPortionName = useMemo(() => makeDisplayPortionName(t, lang), [t, lang]);
+
+    function displayName(food: Food, nameRu?: string | null): string {
+        if (lang === 'ru' && nameRu) return nameRu;
+        if (lang === 'uz-Cyrl') return uzLatinToCyrl(food.name_uz);
+        return food.name_uz;
+    }
+
+    // ===== Cleanup helpers =====
+    function scheduleToastClear() {
+        if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = window.setTimeout(() => {
+            if (aliveRef.current) setSavedFood(null);
+        }, SAVED_TOAST_MS);
+    }
+
+    function fireLogAdded() {
+        window.dispatchEvent(new CustomEvent('lokma:log-added'));
+    }
+
+    // ===== Lifecycle =====
+    useEffect(() => {
+        aliveRef.current = true;
+        return () => {
+            aliveRef.current = false;
+            if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+        };
+    }, []);
+
+    // Dashboard'dan kelgan meal type prefill
     useEffect(() => {
         if (initialMealType) {
             setCurrentMealType(initialMealType);
@@ -300,34 +362,63 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
 
     // Mahalliy taomlarni cache'ga yuklash
     useEffect(() => {
+        let cancelled = false;
         (async () => {
-            const { data, error } = await supabase.from('local_foods').select('*');
-            if (!error && data) setLocalCache(data as LocalFoodRow[]);
+            try {
+                const { data, error } = await supabase.from('local_foods').select('*');
+                if (cancelled || !aliveRef.current) return;
+                if (!error && data) setLocalCache(data as LocalFoodRow[]);
+            } catch {
+                /* silent — favorites/global search hali ishlaydi */
+            }
         })();
+        return () => { cancelled = true; };
     }, []);
 
     // Tab favorites'ga o'tganda yuklash
+    const refreshFavorites = useCallback(async () => {
+        const tid = telegramIdRef.current;
+        if (!tid || !aliveRef.current) return;
+        setLoadingFavs(true);
+        try {
+            const list = await getAllFavorites(tid, 50);
+            if (aliveRef.current) setFavorites(list);
+        } catch {
+            if (aliveRef.current) setFavorites([]);
+        } finally {
+            if (aliveRef.current) setLoadingFavs(false);
+        }
+    }, []);
+
     useEffect(() => {
         if (activeTab !== 'favorites') return;
-        const telegramId = getTelegramId();
-        if (!telegramId) return;
-        setLoadingFavs(true);
-        getAllFavorites(telegramId, 50)
-            .then(setFavorites)
-            .finally(() => setLoadingFavs(false));
-    }, [activeTab]);
+        void refreshFavorites();
+    }, [activeTab, refreshFavorites]);
 
-    // === Sevimlidan tezda log qilish ===
+    // Log qo'shilganda favorites tab active bo'lsa yangilash (use_count'ni tozalash)
+    useEffect(() => {
+        function onLogAdded() {
+            if (activeTab === 'favorites') void refreshFavorites();
+        }
+        window.addEventListener('lokma:log-added', onLogAdded);
+        return () => window.removeEventListener('lokma:log-added', onLogAdded);
+    }, [activeTab, refreshFavorites]);
+
+    // ===== Sevimlidan tezda log qilish =====
     async function addFavoriteFood(fav: FavoriteFood, grams = 100) {
-        const telegramId = getTelegramId();
-        if (!telegramId) return;
+        const tid = telegramIdRef.current;
+        if (!tid) return;
+        if (favInflightRef.current.has(fav.id)) return;
+        favInflightRef.current.add(fav.id);
         setFavActionId(fav.id);
+        hapticImpact('light');
         try {
             const ratio = grams / 100;
             const calories = Math.round(fav.kcal_per_100g * ratio);
             const { error } = await supabase.from('food_logs').insert({
-                telegram_id: telegramId,
+                telegram_id: tid,
                 food_name: fav.food_name,
+                grams,
                 calories,
                 protein: +(fav.protein_per_100g * ratio).toFixed(1),
                 fat: +(fav.fat_per_100g * ratio).toFixed(1),
@@ -335,66 +426,90 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
                 meal_type: currentMealType,
             });
             if (error) throw error;
-            // use_count oshirish
-            await upsertFavorite({
-                telegramId,
-                foodName: fav.food_name,
-                kcalPer100g: fav.kcal_per_100g,
-                proteinPer100g: fav.protein_per_100g,
-                fatPer100g: fav.fat_per_100g,
-                carbsPer100g: fav.carbs_per_100g,
-                source: fav.source,
-                sourceId: fav.source_id,
-                emoji: fav.emoji,
-            });
-            await addCoinsForLog();
-            // Lokal state yangilash (use_count++)
+
+            // use_count oshirish (best-effort)
+            try {
+                await upsertFavorite({
+                    telegramId: tid,
+                    foodName: fav.food_name,
+                    kcalPer100g: fav.kcal_per_100g,
+                    proteinPer100g: fav.protein_per_100g,
+                    fatPer100g: fav.fat_per_100g,
+                    carbsPer100g: fav.carbs_per_100g,
+                    source: fav.source,
+                    sourceId: fav.source_id ?? undefined,
+                    emoji: fav.emoji,
+                });
+            } catch { /* ignore */ }
+
+            try { await addCoinsForLog(); } catch { /* ignore */ }
+
+            if (!aliveRef.current) return;
+            // Optimistik: use_count++
             setFavorites((prev) =>
                 prev.map((f) => (f.id === fav.id ? { ...f, use_count: f.use_count + 1 } : f))
             );
             setSavedFood({ name: fav.food_name, grams, cal: calories });
-            setTimeout(() => setSavedFood(null), 2000);
-            // Dashboard'ga "log qo'shildi" signali — MealBreakdown va dailyCalories yangilanishi uchun
-            window.dispatchEvent(new CustomEvent('lokma:log-added'));
+            scheduleToastClear();
+            hapticNotify('success');
+            fireLogAdded();
             if (currentMealType && onMealConsumed) {
                 onMealConsumed();
                 setCurrentMealType(null);
             }
         } catch (err) {
-            const msg = err instanceof Error ? err.message : t('food_save_error');
-            await showAlert(msg);
+            const lokmaErr = toLokmaError(err, 'database');
+            hapticNotify('error');
+            await showAlert(lokmaErr.message || tRef.current('food_save_error'));
         } finally {
-            setFavActionId(null);
+            favInflightRef.current.delete(fav.id);
+            if (aliveRef.current) setFavActionId(null);
         }
     }
 
     async function handleTogglePin(fav: FavoriteFood) {
-        const telegramId = getTelegramId();
-        if (!telegramId) return;
-        const newPinned = await toggleFavoritePin(telegramId, fav.id);
-        setFavorites((prev) => {
-            const updated = prev.map((f) => (f.id === fav.id ? { ...f, is_pinned: newPinned } : f));
-            // Re-sort: pinned tepada
-            return [...updated].sort((a, b) => {
-                if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
-                if (a.use_count !== b.use_count) return b.use_count - a.use_count;
-                return b.last_used_at.localeCompare(a.last_used_at);
+        const tid = telegramIdRef.current;
+        if (!tid) return;
+        hapticSelection();
+        try {
+            const newPinned = await toggleFavoritePin(tid, fav.id);
+            if (!aliveRef.current) return;
+            setFavorites((prev) => {
+                const updated = prev.map((f) => (f.id === fav.id ? { ...f, is_pinned: newPinned } : f));
+                return [...updated].sort((a, b) => {
+                    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+                    if (a.use_count !== b.use_count) return b.use_count - a.use_count;
+                    return b.last_used_at.localeCompare(a.last_used_at);
+                });
             });
-        });
+        } catch {
+            /* silent — user retry qiladi */
+        }
     }
 
     async function handleDeleteFav(fav: FavoriteFood) {
-        const telegramId = getTelegramId();
-        if (!telegramId) return;
+        const tid = telegramIdRef.current;
+        if (!tid) return;
         setFavActionId(fav.id);
-        const ok = await deleteFavorite(telegramId, fav.id);
-        if (ok) {
-            setFavorites((prev) => prev.filter((f) => f.id !== fav.id));
+        hapticImpact('medium');
+        try {
+            const ok = await deleteFavorite(tid, fav.id);
+            if (!aliveRef.current) return;
+            if (ok) {
+                setFavorites((prev) => prev.filter((f) => f.id !== fav.id));
+                hapticNotify('success');
+            }
+        } catch {
+            hapticNotify('error');
+        } finally {
+            if (aliveRef.current) {
+                setFavActionId(null);
+                setConfirmDeleteId(null);
+            }
         }
-        setFavActionId(null);
-        setConfirmDeleteId(null);
     }
 
+    // ===== Search =====
     function filterLocal(q: string): Food[] {
         const qLower = q.toLowerCase().trim();
         if (!qLower) return [];
@@ -404,7 +519,7 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
                 if (row.name_ru?.toLowerCase().includes(qLower)) return true;
                 return row.aliases.some((a) => a.toLowerCase().includes(qLower));
             })
-            .slice(0, 7)
+            .slice(0, LOCAL_SEARCH_CAP)
             .map((row) => ({
                 id: `local_${row.id}`,
                 name_uz: row.name_uz,
@@ -426,39 +541,50 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
             setHasSearched(false);
             return;
         }
+        const seq = ++searchSeqRef.current;
         setSearching(true);
+        hapticImpact('light');
         try {
             const localResults = filterLocal(q);
-            const remaining = Math.max(3, 10 - localResults.length);
+            const remaining = Math.max(MIN_GLOBAL_RESULTS, GLOBAL_SEARCH_LIMIT - localResults.length);
+            const safe = escapeLikePattern(q);
 
             const { data: globalData, error } = await supabase
                 .from('foods')
                 .select('*')
-                .ilike('name_uz', `%${q}%`)
+                .ilike('name_uz', `%${safe}%`)
                 .limit(remaining);
             if (error) throw error;
 
-            const globalResults: Food[] = (globalData || []).map((row: { id: number; name_uz: string; calories: number; protein: number; fat: number; carbs: number }) => ({
+            // Eskirgan javob — tashla
+            if (seq !== searchSeqRef.current || !aliveRef.current) return;
+
+            const rows = (globalData ?? []) as GlobalFoodRow[];
+            const globalResults: Food[] = rows.map((row) => ({
                 id: `global_${row.id}`,
                 name_uz: row.name_uz,
-                calories: row.calories,
-                protein: row.protein,
-                fat: row.fat,
-                carbs: row.carbs,
+                calories: Number(row.calories),
+                protein: Number(row.protein),
+                fat: Number(row.fat),
+                carbs: Number(row.carbs),
                 isLocal: false,
             }));
 
             setResults([...localResults, ...globalResults]);
             setHasSearched(true);
         } catch (err) {
-            const msg = err instanceof Error ? err.message : t('error_prefix');
-            await showAlert(msg);
+            if (seq !== searchSeqRef.current || !aliveRef.current) return;
+            const lokmaErr = toLokmaError(err, 'database');
+            await showAlert(lokmaErr.message || tRef.current('error_prefix'));
         } finally {
-            setSearching(false);
+            if (seq === searchSeqRef.current && aliveRef.current) {
+                setSearching(false);
+            }
         }
     }
 
     function setPortion(foodId: string, grams: number) {
+        hapticSelection();
         setPortions((p) => ({ ...p, [foodId]: grams }));
     }
 
@@ -468,13 +594,15 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
         const calories = Math.round(food.calories * ratio);
 
         setSavingId(food.id);
+        hapticImpact('light');
         try {
-            const telegramId = getTelegramId();
-            if (!telegramId) throw new Error(t('food_no_telegram'));
+            const tid = telegramIdRef.current;
+            if (!tid) throw new Error(tRef.current('food_no_telegram'));
 
             const { error } = await supabase.from('food_logs').insert({
-                telegram_id: telegramId,
+                telegram_id: tid,
                 food_name: food.name_uz,
+                grams,
                 calories,
                 protein: +(food.protein * ratio).toFixed(1),
                 fat: +(food.fat * ratio).toFixed(1),
@@ -483,35 +611,43 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
             });
             if (error) throw error;
 
-            // Sevimlilarga avtomatik qo'shish / use_count oshirish
-            await upsertFavorite({
-                telegramId,
-                foodName: food.name_uz,
-                kcalPer100g: food.calories,
-                proteinPer100g: food.protein,
-                fatPer100g: food.fat,
-                carbsPer100g: food.carbs,
-                source: food.isLocal ? 'local' : 'manual',
-                sourceId: food.id,
-                emoji: food.emoji ?? null,
-            });
+            try {
+                await upsertFavorite({
+                    telegramId: tid,
+                    foodName: food.name_uz,
+                    kcalPer100g: food.calories,
+                    proteinPer100g: food.protein,
+                    fatPer100g: food.fat,
+                    carbsPer100g: food.carbs,
+                    source: food.isLocal ? 'local' : 'manual',
+                    sourceId: food.id,
+                    emoji: food.emoji ?? null,
+                });
+            } catch { /* ignore */ }
 
-            await addCoinsForLog();
+            try { await addCoinsForLog(); } catch { /* ignore */ }
 
+            if (!aliveRef.current) return;
             setSavedFood({ name: displayName(food, food.name_ru), grams, cal: calories });
-            setTimeout(() => setSavedFood(null), 2000);
-            // Dashboard'ga "log qo'shildi" signali
-            window.dispatchEvent(new CustomEvent('lokma:log-added'));
+            scheduleToastClear();
+            hapticNotify('success');
+            fireLogAdded();
             if (currentMealType && onMealConsumed) {
                 onMealConsumed();
                 setCurrentMealType(null);
             }
         } catch (err) {
-            const msg = err instanceof Error ? err.message : t('food_save_error');
-            await showAlert(msg);
+            const lokmaErr = toLokmaError(err, 'database');
+            hapticNotify('error');
+            await showAlert(lokmaErr.message || tRef.current('food_save_error'));
         } finally {
-            setSavingId(null);
+            if (aliveRef.current) setSavingId(null);
         }
+    }
+
+    function handleTabChange(tab: TabKey) {
+        hapticSelection();
+        setActiveTab(tab);
     }
 
     return (
@@ -529,7 +665,7 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
                     </p>
                 </motion.div>
 
-                {/* Meal context badge — Dashboard'dan "+ Nonushta" kabi tugmadan kelganda */}
+                {/* Meal context badge */}
                 <AnimatePresence>
                     {currentMealType && (
                         <motion.div
@@ -572,7 +708,7 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
                     )}
                 </AnimatePresence>
 
-                {/* Tab pill — Qidiruv / Sevimlilar / Mahalliy */}
+                {/* Tab pill */}
                 <div
                     className="flex p-1 rounded-2xl mb-4 bg-white dark:bg-[#1E252E]"
                     style={{ boxShadow: '0 4px 14px -6px rgba(91, 106, 208, 0.12)' }}
@@ -586,7 +722,7 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
                         return (
                             <button
                                 key={tab}
-                                onClick={() => setActiveTab(tab)}
+                                onClick={() => handleTabChange(tab)}
                                 className="relative flex-1 py-2.5 text-[12px] font-extrabold rounded-xl transition-colors"
                                 style={{
                                     color: isActive ? '#FFFFFF' : 'var(--color-muted, #78716C)',
@@ -609,7 +745,7 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
                     })}
                 </div>
 
-                {/* Global savedFood toast — 3 tab uchun */}
+                {/* Global savedFood toast */}
                 <AnimatePresence>
                     {savedFood && (
                         <motion.div
@@ -825,6 +961,7 @@ export default function FoodSearch({ initialMealType = null, onMealConsumed }: F
                         addFood={addFood}
                         t={t}
                         displayLang={lang}
+                        displayPortionName={displayPortionName}
                     />
                 )}
             </div>
@@ -846,7 +983,7 @@ function MacroPill({ label, value, cls }: { label: string; value: number; cls: s
 }
 
 // =================================================================
-// FavoritesView — Sevimlilar tab (swipe-to-delete + pin)
+// FavoritesView — Sevimlilar tab
 // =================================================================
 interface FavoritesViewProps {
     favorites: FavoriteFood[];
@@ -995,7 +1132,7 @@ function FavoritesView({
 }
 
 // =================================================================
-// FavoriteRow — swipe-to-reveal Pin/Delete tugmalari
+// FavoriteRow — swipe-to-reveal
 // =================================================================
 interface FavoriteRowProps {
     fav: FavoriteFood;
@@ -1010,7 +1147,6 @@ interface FavoriteRowProps {
 
 function FavoriteRow({ fav, idx, disabled, onAdd, onPin, onAskDelete, t, displayLang }: FavoriteRowProps) {
     const [revealed, setRevealed] = useState(false);
-    const SWIPE_WIDTH = 130;
 
     function displayFavName(): string {
         if (displayLang === 'uz-Cyrl') return uzLatinToCyrl(fav.food_name);
@@ -1026,7 +1162,7 @@ function FavoriteRow({ fav, idx, disabled, onAdd, onPin, onAskDelete, t, display
             className="relative overflow-hidden rounded-[1.25rem]"
         >
             {/* Background actions — swipe revealed */}
-            <div className="absolute inset-y-0 right-0 flex items-stretch" style={{ width: SWIPE_WIDTH }}>
+            <div className="absolute inset-y-0 right-0 flex items-stretch" style={{ width: SWIPE_REVEAL_PX }}>
                 <button
                     onClick={onPin}
                     className="flex-1 flex flex-col items-center justify-center gap-0.5 text-white font-extrabold"
@@ -1049,18 +1185,17 @@ function FavoriteRow({ fav, idx, disabled, onAdd, onPin, onAskDelete, t, display
                 </button>
             </div>
 
-            {/* Foreground — draggable card */}
+            {/* Foreground */}
             <motion.div
                 drag="x"
                 dragDirectionLock
-                dragConstraints={{ left: -SWIPE_WIDTH, right: 0 }}
+                dragConstraints={{ left: -SWIPE_REVEAL_PX, right: 0 }}
                 dragElastic={0.05}
                 dragMomentum={false}
-                animate={{ x: revealed ? -SWIPE_WIDTH : 0 }}
+                animate={{ x: revealed ? -SWIPE_REVEAL_PX : 0 }}
                 transition={SPRING}
                 onDragEnd={(_, info) => {
-                    if (info.offset.x < -50) setRevealed(true);
-                    else setRevealed(false);
+                    setRevealed(info.offset.x < -SWIPE_TRIGGER_PX);
                 }}
                 className="relative bg-white dark:bg-[#1E252E] p-3.5 flex items-center gap-3"
                 style={{
@@ -1068,7 +1203,6 @@ function FavoriteRow({ fav, idx, disabled, onAdd, onPin, onAskDelete, t, display
                     touchAction: 'pan-y',
                 }}
             >
-                {/* Emoji / icon */}
                 <div
                     className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0"
                     style={{
@@ -1084,7 +1218,6 @@ function FavoriteRow({ fav, idx, disabled, onAdd, onPin, onAskDelete, t, display
                     )}
                 </div>
 
-                {/* Name + meta */}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                         <h4 className="font-extrabold text-[14px] text-stone-900 dark:text-slate-100 capitalize truncate">
@@ -1111,7 +1244,6 @@ function FavoriteRow({ fav, idx, disabled, onAdd, onPin, onAskDelete, t, display
                     </div>
                 </div>
 
-                {/* Quick add (100g) */}
                 <motion.button
                     whileTap={{ scale: 0.92 }}
                     onClick={(e) => {
@@ -1139,7 +1271,7 @@ function FavoriteRow({ fav, idx, disabled, onAdd, onPin, onAskDelete, t, display
 }
 
 // =================================================================
-// LocalView — 🇺🇿 Mahalliy taomlar (filter + grid)
+// LocalView — 🇺🇿 Mahalliy taomlar
 // =================================================================
 interface LocalViewProps {
     localCache: LocalFoodRow[];
@@ -1151,6 +1283,7 @@ interface LocalViewProps {
     addFood: (food: Food) => void;
     t: (key: string) => string;
     displayLang: string;
+    displayPortionName: (name?: string) => string | undefined;
 }
 
 function LocalView({
@@ -1163,6 +1296,7 @@ function LocalView({
     addFood,
     t,
     displayLang,
+    displayPortionName,
 }: LocalViewProps) {
     function localDisplayName(row: LocalFoodRow): string {
         if (displayLang === 'ru' && row.name_ru) return row.name_ru;
@@ -1170,36 +1304,15 @@ function LocalView({
         return row.name_uz;
     }
 
-    function displayPortionName(name?: string): string | undefined {
-        if (!name) return undefined;
-        const lower = name.toLowerCase().trim();
-        const map: Record<string, string> = {
-            'kichik porsiya': 'p_small',
-            "o'rta porsiya": 'p_medium',
-            'katta porsiya': 'p_large',
-            'oilaviy lagan': 'p_family',
-        };
-        if (map[lower]) return t(map[lower]);
-        const m = lower.match(/^(\d+)\s+dona(?:\s+(kichik|o'rta|katta))?$/);
-        if (m) {
-            const n = m[1];
-            const size = m[2];
-            if (!size) return `${n} ${t('p_piece')}`;
-            const sizeKey = size === 'kichik' ? 'p_piece_small' : size === "o'rta" ? 'p_piece_medium' : 'p_piece_large';
-            return `${n} ${t(sizeKey)}`;
-        }
-        if (displayLang === 'uz-Cyrl') return uzLatinToCyrl(name);
-        return name;
-    }
-
-    const qLower = localQuery.toLowerCase().trim();
-    const filtered = qLower
-        ? localCache.filter((row) => {
+    const filtered = useMemo(() => {
+        const qLower = localQuery.toLowerCase().trim();
+        if (!qLower) return localCache;
+        return localCache.filter((row) => {
             if (row.name_uz.toLowerCase().includes(qLower)) return true;
             if (row.name_ru?.toLowerCase().includes(qLower)) return true;
             return row.aliases.some((a) => a.toLowerCase().includes(qLower));
-        })
-        : localCache;
+        });
+    }, [localCache, localQuery]);
 
     if (localCache.length === 0) {
         return (
@@ -1238,7 +1351,7 @@ function LocalView({
             </div>
 
             <div className="space-y-3">
-                {filtered.slice(0, 50).map((row, idx) => {
+                {filtered.slice(0, LOCAL_VIEW_CAP).map((row, idx) => {
                     const food: Food = {
                         id: `local_${row.id}`,
                         name_uz: row.name_uz,
@@ -1324,9 +1437,9 @@ function LocalView({
                 })}
             </div>
 
-            {filtered.length > 50 && (
+            {filtered.length > LOCAL_VIEW_CAP && (
                 <div className="text-center text-[11px] text-stone-400 dark:text-slate-500 font-bold mt-4">
-                    +{filtered.length - 50}
+                    +{filtered.length - LOCAL_VIEW_CAP}
                 </div>
             )}
         </div>

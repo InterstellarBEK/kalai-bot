@@ -1,8 +1,12 @@
 // src/MealBreakdownCard.tsx
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from './i18n';
 import { uzLatinToCyrl } from './transliterate';
+
+// ============================================================================
+// TYPES
+// ============================================================================
 
 type MealKey = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
@@ -23,6 +27,18 @@ interface Props {
     onAddMeal?: (mealType: MealKey) => void;
 }
 
+interface MealSegment {
+    kcal: number;
+    p: number;
+    f: number;
+    c: number;
+    items: FoodLog[];
+}
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
 const MEAL_PERCENTAGES: Record<MealKey, number> = {
     breakfast: 0.25,
     lunch: 0.35,
@@ -30,7 +46,7 @@ const MEAL_PERCENTAGES: Record<MealKey, number> = {
     snack: 0.10,
 };
 
-const MEAL_ORDER: MealKey[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+const MEAL_ORDER: readonly MealKey[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 const MEAL_EMOJI: Record<MealKey, string> = {
     breakfast: '🌅',
@@ -77,8 +93,23 @@ const MEAL_TIME: Record<MealKey, string> = {
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
 const EASE_BACK = [0.34, 1.56, 0.64, 1] as const;
 
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function safeNum(v: unknown): number {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 function inferMealByTime(iso: string | Date): MealKey {
-    const h = iso instanceof Date ? iso.getHours() : new Date(iso).getHours();
+    let h: number;
+    try {
+        h = iso instanceof Date ? iso.getHours() : new Date(iso).getHours();
+        if (!Number.isFinite(h)) h = 12;
+    } catch {
+        h = 12;
+    }
     if (h >= 5 && h < 11) return 'breakfast';
     if (h >= 11 && h < 15) return 'lunch';
     if (h >= 15 && h < 21) return 'dinner';
@@ -102,14 +133,21 @@ function useIsDark(): boolean {
 
 function hexAlpha(hex: string, alpha: number): string {
     const h = hex.replace('#', '');
+    if (h.length !== 6) return `rgba(0,0,0,${alpha})`;
     const r = parseInt(h.slice(0, 2), 16);
     const g = parseInt(h.slice(2, 4), 16);
     const b = parseInt(h.slice(4, 6), 16);
+    if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
+        return `rgba(0,0,0,${alpha})`;
+    }
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// ===== Macro ikonlar =====
-function MIcon({ name, color }: { name: 'p' | 'f' | 'c'; color: string }) {
+// ============================================================================
+// ICONS (memoized)
+// ============================================================================
+
+const MIcon = memo(function MIcon({ name, color }: { name: 'p' | 'f' | 'c'; color: string }) {
     const common = {
         width: 11,
         height: 11,
@@ -140,26 +178,63 @@ function MIcon({ name, color }: { name: 'p' | 'f' | 'c'; color: string }) {
                 </svg>
             );
     }
-}
+});
 
-// Plus ikon (empty CTA)
-function PlusIcon({ color }: { color: string }) {
+const PlusIcon = memo(function PlusIcon({ color }: { color: string }) {
     return (
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round">
             <path d="M12 5v14M5 12h14" />
         </svg>
     );
+});
+
+// ============================================================================
+// MACRO PILL (memoized)
+// ============================================================================
+
+interface MacroPillProps {
+    iconName: 'p' | 'f' | 'c';
+    label: string;
+    value: number;
+    color: string;
+    bg: string;
+    isDark: boolean;
 }
 
-export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Props) {
+const MacroPill = memo(function MacroPill({ iconName, label, value, color, bg, isDark }: MacroPillProps) {
+    return (
+        <div
+            className="px-2 py-1 rounded-lg flex items-center gap-1"
+            style={{
+                background: bg,
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}`,
+            }}
+        >
+            <MIcon name={iconName} color={color} />
+            <span className="text-[9px] font-extrabold" style={{ color: isDark ? '#94A3B8' : '#78716C' }}>
+                {label}
+            </span>
+            <span className="text-[10px] font-extrabold" style={{ color: isDark ? '#F1F5F9' : '#292524' }}>
+                {Math.round(value)}g
+            </span>
+        </div>
+    );
+});
+
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
+function MealBreakdownCardBase({ logs, dailyTarget, onAddMeal }: Props) {
     const { t, lang } = useTranslation();
     const isDark = useIsDark();
     const [expanded, setExpanded] = useState<MealKey | null>(null);
 
     // Hozirgi vaqt segmenti
-    const currentMeal = inferMealByTime(new Date());
+    const currentMeal = useMemo(() => inferMealByTime(new Date()), []);
 
-    const labels = {
+    // ==== Labels (memoized per lang) ====
+    const labels = useMemo(() => ({
         title:
             (
                 {
@@ -205,34 +280,57 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                     en: 'Add',
                 } as Record<string, string>
             )[lang] || "Qo'shish",
-    };
+    }), [lang]);
 
-    const localizeName = (name: string): string => {
+    // ==== Name localizer (memoized) ====
+    const localizeName = useCallback((name: string): string => {
         if (lang === 'uz-Cyrl' || lang === 'ru') return uzLatinToCyrl(name);
         return name;
-    };
+    }, [lang]);
 
-    const groups: Record<MealKey, { kcal: number; p: number; f: number; c: number; items: FoodLog[] }> = {
-        breakfast: { kcal: 0, p: 0, f: 0, c: 0, items: [] },
-        lunch: { kcal: 0, p: 0, f: 0, c: 0, items: [] },
-        dinner: { kcal: 0, p: 0, f: 0, c: 0, items: [] },
-        snack: { kcal: 0, p: 0, f: 0, c: 0, items: [] },
-    };
+    // ==== Groups computation (memoized) ====
+    const groups = useMemo<Record<MealKey, MealSegment>>(() => {
+        const g: Record<MealKey, MealSegment> = {
+            breakfast: { kcal: 0, p: 0, f: 0, c: 0, items: [] },
+            lunch: { kcal: 0, p: 0, f: 0, c: 0, items: [] },
+            dinner: { kcal: 0, p: 0, f: 0, c: 0, items: [] },
+            snack: { kcal: 0, p: 0, f: 0, c: 0, items: [] },
+        };
+        for (const l of logs) {
+            const mt = l.meal_type as MealKey | undefined;
+            const m = mt && g[mt] ? mt : inferMealByTime(l.logged_at);
+            g[m].kcal += safeNum(l.calories);
+            g[m].p += safeNum(l.protein);
+            g[m].f += safeNum(l.fat);
+            g[m].c += safeNum(l.carbs);
+            g[m].items.push(l);
+        }
+        return g;
+    }, [logs]);
 
-    for (const l of logs) {
-        const mt = l.meal_type as MealKey | undefined;
-        const m = mt && groups[mt] ? mt : inferMealByTime(l.logged_at);
-        groups[m].kcal += Number(l.calories || 0);
-        groups[m].p += Number(l.protein || 0);
-        groups[m].f += Number(l.fat || 0);
-        groups[m].c += Number(l.carbs || 0);
-        groups[m].items.push(l);
-    }
+    // ==== Colors (theme-dependent, memoized) ====
+    const themeColors = useMemo(() => ({
+        trackColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)',
+        pillBg: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.85)',
+        dimText: isDark ? '#64748B' : '#A8A29E',
+        secondaryText: isDark ? '#94A3B8' : '#78716C',
+        itemBg: isDark ? '#1E252E' : '#FFFFFF',
+        itemText: isDark ? '#F1F5F9' : '#292524',
+        itemTextMuted: isDark ? '#94A3B8' : '#57534E',
+        headerText: isDark ? '#F1F5F9' : '#1C1917',
+        badgeText: isDark ? '#0F172A' : '#FFFFFF',
+    }), [isDark]);
 
-    const trackColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)';
-    const pillBg = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.85)';
-    const dimText = isDark ? '#64748B' : '#A8A29E';
-    const secondaryText = isDark ? '#94A3B8' : '#78716C';
+    // ==== Handlers ====
+    const handleAdd = useCallback((m: MealKey) => {
+        onAddMeal?.(m);
+    }, [onAddMeal]);
+
+    const handleToggle = useCallback((m: MealKey) => {
+        setExpanded((prev) => (prev === m ? null : m));
+    }, []);
+
+    const safeTarget = Math.max(1, safeNum(dailyTarget));
 
     return (
         <motion.div
@@ -245,7 +343,7 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                 <h3 className="text-[15px] font-extrabold text-stone-800 dark:text-slate-100">
                     {labels.title}
                 </h3>
-                <span className="text-[11px] font-bold" style={{ color: secondaryText }}>
+                <span className="text-[11px] font-bold" style={{ color: themeColors.secondaryText }}>
                     {logs.length} {t('logs_count_suffix')}
                 </span>
             </div>
@@ -253,7 +351,7 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
             <div className="space-y-2">
                 {MEAL_ORDER.map((m, idx) => {
                     const seg = groups[m];
-                    const segTarget = Math.max(1, Math.round(dailyTarget * MEAL_PERCENTAGES[m]));
+                    const segTarget = Math.max(1, Math.round(safeTarget * MEAL_PERCENTAGES[m]));
                     const percent = Math.min(100, Math.round((seg.kcal / segTarget) * 100));
                     const isEmpty = seg.items.length === 0;
                     const isOpen = expanded === m;
@@ -268,7 +366,6 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
 
                     // ===== EMPTY CARD — outline only =====
                     if (isEmpty) {
-                        const handleClick = () => onAddMeal?.(m);
                         const clickable = !!onAddMeal;
 
                         return (
@@ -280,13 +377,12 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                             >
                                 <motion.button
                                     whileTap={clickable ? { scale: 0.985 } : undefined}
-                                    onClick={clickable ? handleClick : undefined}
+                                    onClick={clickable ? () => handleAdd(m) : undefined}
                                     className="w-full rounded-[1.25rem] px-3.5 py-2.5 text-left flex items-center justify-between gap-3"
                                     style={{
                                         background: 'transparent',
                                         border: `1.5px dashed ${hexAlpha(accent, isDark ? 0.28 : 0.22)}`,
                                         cursor: clickable ? 'pointer' : 'default',
-                                        // Pulse halo agar hozirgi vaqt + bo'sh
                                         boxShadow: isCurrent
                                             ? `0 0 0 3px ${hexAlpha(accent, isDark ? 0.10 : 0.07)}`
                                             : 'none',
@@ -312,14 +408,14 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                                         className="text-[8px] font-extrabold px-1.5 py-0.5 rounded-md tracking-wider"
                                                         style={{
                                                             background: accent,
-                                                            color: isDark ? '#0F172A' : '#FFFFFF',
+                                                            color: themeColors.badgeText,
                                                         }}
                                                     >
                                                         {labels.now}
                                                     </motion.span>
                                                 )}
                                             </div>
-                                            <div className="text-[10px] font-bold mt-0.5" style={{ color: dimText }}>
+                                            <div className="text-[10px] font-bold mt-0.5" style={{ color: themeColors.dimText }}>
                                                 {MEAL_TIME[m]}
                                             </div>
                                         </div>
@@ -337,7 +433,7 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                             <span className="text-[11px] font-extrabold">{labels.add}</span>
                                         </div>
                                     ) : (
-                                        <span className="text-[11px] font-bold flex-shrink-0" style={{ color: dimText }}>
+                                        <span className="text-[11px] font-bold flex-shrink-0" style={{ color: themeColors.dimText }}>
                                             {labels.empty}
                                         </span>
                                     )}
@@ -360,7 +456,7 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                         >
                             <motion.button
                                 whileTap={{ scale: 0.985 }}
-                                onClick={() => setExpanded(isOpen ? null : m)}
+                                onClick={() => handleToggle(m)}
                                 className="w-full rounded-[1.25rem] p-3.5 text-left block relative"
                                 style={{
                                     background: filledBg,
@@ -369,7 +465,7 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                     cursor: 'pointer',
                                 }}
                             >
-                                {/* HOZIR badge — top-right floating */}
+                                {/* HOZIR badge */}
                                 {isCurrent && (
                                     <motion.div
                                         initial={{ opacity: 0, y: -4, scale: 0.8 }}
@@ -378,7 +474,7 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                         className="absolute -top-2 right-3 text-[9px] font-extrabold px-2 py-0.5 rounded-md tracking-wider"
                                         style={{
                                             background: accent,
-                                            color: isDark ? '#0F172A' : '#FFFFFF',
+                                            color: themeColors.badgeText,
                                             boxShadow: `0 4px 12px -3px ${hexAlpha(accent, 0.6)}`,
                                         }}
                                     >
@@ -399,7 +495,7 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                             >
                                                 {label}
                                             </div>
-                                            <div className="text-[10px] font-bold mt-0.5" style={{ color: secondaryText }}>
+                                            <div className="text-[10px] font-bold mt-0.5" style={{ color: themeColors.secondaryText }}>
                                                 {MEAL_TIME[m]}
                                             </div>
                                         </div>
@@ -408,11 +504,11 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                         <div className="leading-none">
                                             <span
                                                 className="text-[20px] font-extrabold leading-none"
-                                                style={{ color: isDark ? '#F1F5F9' : '#1C1917' }}
+                                                style={{ color: themeColors.headerText }}
                                             >
                                                 {Math.round(seg.kcal)}
                                             </span>
-                                            <span className="text-[11px] font-bold ml-1" style={{ color: secondaryText }}>
+                                            <span className="text-[11px] font-bold ml-1" style={{ color: themeColors.secondaryText }}>
                                                 / {segTarget}
                                             </span>
                                         </div>
@@ -422,10 +518,10 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                     </div>
                                 </div>
 
-                                {/* Progress bar — gradient + glow */}
+                                {/* Progress bar */}
                                 <div
                                     className="h-2 rounded-full overflow-hidden relative"
-                                    style={{ background: trackColor }}
+                                    style={{ background: themeColors.trackColor }}
                                 >
                                     <motion.div
                                         initial={{ width: 0 }}
@@ -444,16 +540,16 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                     </motion.div>
                                 </div>
 
-                                {/* Macro pills + count */}
+                                {/* Macro pills */}
                                 <div className="flex items-center gap-1.5 mt-3">
-                                    <MacroPill iconName="p" label="P" value={seg.p} color={accent} bg={pillBg} isDark={isDark} />
-                                    <MacroPill iconName="f" label="F" value={seg.f} color={accent} bg={pillBg} isDark={isDark} />
-                                    <MacroPill iconName="c" label="C" value={seg.c} color={accent} bg={pillBg} isDark={isDark} />
+                                    <MacroPill iconName="p" label="P" value={seg.p} color={accent} bg={themeColors.pillBg} isDark={isDark} />
+                                    <MacroPill iconName="f" label="F" value={seg.f} color={accent} bg={themeColors.pillBg} isDark={isDark} />
+                                    <MacroPill iconName="c" label="C" value={seg.c} color={accent} bg={themeColors.pillBg} isDark={isDark} />
                                     <div className="ml-auto flex items-center gap-1">
                                         <span className="text-[10px] font-extrabold" style={{ color: accent }}>
                                             {seg.items.length}
                                         </span>
-                                        <span className="text-[10px] font-bold" style={{ color: secondaryText }}>
+                                        <span className="text-[10px] font-bold" style={{ color: themeColors.secondaryText }}>
                                             {t('logs_count_suffix')}
                                         </span>
                                         <motion.svg
@@ -494,7 +590,7 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                                     transition={{ ...SPRING, delay: j * 0.04 }}
                                                     className="flex items-center justify-between rounded-xl px-3 py-2.5"
                                                     style={{
-                                                        background: isDark ? '#1E252E' : '#FFFFFF',
+                                                        background: themeColors.itemBg,
                                                         border: `1px solid ${hexAlpha(accent, isDark ? 0.15 : 0.10)}`,
                                                     }}
                                                 >
@@ -508,16 +604,16 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
                                                         />
                                                         <span
                                                             className="text-[13px] font-bold truncate capitalize"
-                                                            style={{ color: isDark ? '#F1F5F9' : '#292524' }}
+                                                            style={{ color: themeColors.itemText }}
                                                         >
                                                             {localizeName(it.food_name)}
                                                         </span>
                                                     </div>
                                                     <span
                                                         className="text-[12px] font-extrabold ml-2 flex-shrink-0"
-                                                        style={{ color: isDark ? '#94A3B8' : '#57534E' }}
+                                                        style={{ color: themeColors.itemTextMuted }}
                                                     >
-                                                        {Math.round(it.calories)} kcal
+                                                        {Math.round(safeNum(it.calories))} kcal
                                                     </span>
                                                 </motion.div>
                                             ))}
@@ -533,36 +629,5 @@ export default function MealBreakdownCard({ logs, dailyTarget, onAddMeal }: Prop
     );
 }
 
-function MacroPill({
-    iconName,
-    label,
-    value,
-    color,
-    bg,
-    isDark,
-}: {
-    iconName: 'p' | 'f' | 'c';
-    label: string;
-    value: number;
-    color: string;
-    bg: string;
-    isDark: boolean;
-}) {
-    return (
-        <div
-            className="px-2 py-1 rounded-lg flex items-center gap-1"
-            style={{
-                background: bg,
-                border: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}`,
-            }}
-        >
-            <MIcon name={iconName} color={color} />
-            <span className="text-[9px] font-extrabold" style={{ color: isDark ? '#94A3B8' : '#78716C' }}>
-                {label}
-            </span>
-            <span className="text-[10px] font-extrabold" style={{ color: isDark ? '#F1F5F9' : '#292524' }}>
-                {Math.round(value)}g
-            </span>
-        </div>
-    );
-}
+const MealBreakdownCard = memo(MealBreakdownCardBase);
+export default MealBreakdownCard;

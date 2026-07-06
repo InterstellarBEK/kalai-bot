@@ -1,40 +1,154 @@
-﻿import { useState, useEffect } from 'react'
+﻿// i18n.ts — Lokma tarjimalar va til boshqaruvi
+// Premium refactoring: typed keys, SSR-safe storage, event-based sync,
+// cross-tab support (storage event), fallback chain.
+
+import { useState, useEffect, useCallback } from 'react'
+
+// ============================================================
+// TYPES
+// ============================================================
 
 export type Lang = 'uz-Latn' | 'uz-Cyrl' | 'ru' | 'en'
+export type BaseLang = 'uz' | 'ru' | 'en'
+export type Script = 'Latn' | 'Cyrl'
 
+export const AVAILABLE_LANGS: readonly Lang[] = ['uz-Latn', 'uz-Cyrl', 'ru', 'en'] as const
+const DEFAULT_LANG: Lang = 'uz-Latn'
 const STORAGE_KEY = 'lokma_lang'
+const LANG_EVENT = 'lokma:lang-changed'
+
+// ============================================================
+// STORAGE (SSR-safe)
+// ============================================================
+
+function safeGetStorage(): string | null {
+    if (typeof window === 'undefined' || !window.localStorage) return null
+    try {
+        return window.localStorage.getItem(STORAGE_KEY)
+    } catch {
+        return null
+    }
+}
+
+function safeSetStorage(value: string): boolean {
+    if (typeof window === 'undefined' || !window.localStorage) return false
+    try {
+        window.localStorage.setItem(STORAGE_KEY, value)
+        return true
+    } catch {
+        return false
+    }
+}
+
+function isValidLang(v: string | null): v is Lang {
+    return v !== null && (AVAILABLE_LANGS as readonly string[]).includes(v)
+}
+
+// ============================================================
+// PUB/SUB
+// ============================================================
+
 const listeners = new Set<() => void>()
 
-export function setLanguage(lang: 'uz' | 'ru' | 'en', script: 'Latn' | 'Cyrl' = 'Latn') {
-    const key: Lang = lang === 'uz' ? (`uz-${script}` as Lang) : (lang as Lang)
-    localStorage.setItem(STORAGE_KEY, key)
-    listeners.forEach(fn => fn())
+function notifyLangChanged() {
+    listeners.forEach(fn => {
+        try { fn() } catch (e) { console.error('[lokma:i18n] listener error', e) }
+    })
+    // Cross-component + cross-tab uchun
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(LANG_EVENT))
+    }
 }
+
+// ============================================================
+// PUBLIC API
+// ============================================================
 
 export function getLang(): Lang {
-    return (localStorage.getItem(STORAGE_KEY) as Lang) || 'uz-Latn'
+    const stored = safeGetStorage()
+    return isValidLang(stored) ? stored : DEFAULT_LANG
 }
 
+export function setLanguage(lang: BaseLang, script: Script = 'Latn'): void {
+    const key: Lang = lang === 'uz' ? (`uz-${script}` as Lang) : (lang as Lang)
+    if (!isValidLang(key)) {
+        console.warn('[lokma:i18n] invalid lang', { lang, script })
+        return
+    }
+    if (safeSetStorage(key)) {
+        notifyLangChanged()
+    }
+}
+
+/** To'g'ridan-to'g'ri Lang key bilan almashtirish (LanguageScriptPicker uchun). */
+export function setLangKey(key: Lang): void {
+    if (!isValidLang(key)) return
+    if (safeSetStorage(key)) {
+        notifyLangChanged()
+    }
+}
+
+// ============================================================
+// HOOK
+// ============================================================
+
+/**
+ * Translation hook. Til o'zgarganda avtomatik re-render.
+ * Cross-tab (localStorage event) va cross-component (custom event) sync.
+ */
 export function useTranslation() {
     const [lang, setLang] = useState<Lang>(getLang)
 
     useEffect(() => {
         const update = () => setLang(getLang())
         listeners.add(update)
-        return () => { listeners.delete(update) }
+
+        // Cross-tab: boshqa tab STORAGE_KEY'ni o'zgartirsa
+        const onStorage = (e: StorageEvent) => {
+            if (e.key === STORAGE_KEY) update()
+        }
+        // Cross-component: bir tab ichida CustomEvent
+        const onCustom = () => update()
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('storage', onStorage)
+            window.addEventListener(LANG_EVENT, onCustom)
+        }
+
+        return () => {
+            listeners.delete(update)
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('storage', onStorage)
+                window.removeEventListener(LANG_EVENT, onCustom)
+            }
+        }
     }, [])
 
-    function t(key: string): string {
-        return (
-            (translations[lang] as Record<string, string>)[key] ??
-            (translations['uz-Latn'] as Record<string, string>)[key] ??
-            key
-        )
-    }
+    /**
+     * Tarjima olish. Interpolatsiya: {n}, {name} kabi placeholder'lar.
+     * Fallback chain: joriy → uz-Latn → key.
+     */
+    const t = useCallback(
+        (key: string, vars?: Record<string, string | number>): string => {
+            const primary = (translations[lang] as Record<string, string>)[key]
+            const fallback = (translations[DEFAULT_LANG] as Record<string, string>)[key]
+            let raw = primary ?? fallback ?? key
+            if (vars) {
+                for (const [k, v] of Object.entries(vars)) {
+                    raw = raw.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
+                }
+            }
+            return raw
+        },
+        [lang]
+    )
 
     return { t, lang }
 }
 
+// ============================================================
+// TRANSLATIONS
+// ============================================================
 const translations: Record<Lang, Record<string, string>> = {
     'uz-Latn': {
         greeting_night: 'Xayrli tun',
@@ -201,6 +315,12 @@ const translations: Record<Lang, Record<string, string>> = {
         ram_tip_title: 'Maslahat',
         ram_tip_fasting: "Iftarda xurmo va suv bilan boshlash sunnat. Og'ir taomdan oldin sho'rva yeng.",
         ram_tip_eating: "Sahargacha oqsil va sekin parchalanadigan uglevod yeng (osh, manti, tuxum). Suv ko'p iching.",
+        ram_duas_title: 'Duolar',
+        ram_dua_sahar: 'Sahar',
+        ram_dua_iftar: 'Iftar',
+        ram_prayed: "o'qildi",
+        ram_day: 'Ramazon',
+        ram_tip_imminent: "Iftar yaqin. Suv va yengil taom tayyorlab qo'ying. Shoshmang, sekin oching.",
         // Fasting
         fast_title: "Ro'za (IF)",
         fast_active: 'Faol',
@@ -477,6 +597,18 @@ const translations: Record<Lang, Record<string, string>> = {
         macro_protein_short: 'Oqsil',
         macro_fat_short: 'Yog\'',
         macro_carbs_short: 'Uglevod',
+        water_error_add: "Suvni saqlashda xato",
+        water_error_undo: "Bekor qilishda xato",
+        water_error_load: "Suv ma'lumotlari yuklanmadi",
+        water_glasses_capped: "Stakan ko'rsatuvi cheklandi",
+        btn_retry: "Qayta urinish",
+        btn_undo: "Bekor qilish",
+        bmi_low: "Kam vazn",
+        bmi_normal: "Normal",
+        bmi_over: "Ortiqcha",
+        bmi_obese: "Semizlik",
+        weight_error_load: "Vazn ma'lumotlari yuklanmadi",
+        shop_error_load: "Do'kon yuklanmadi",
 
     },
 
@@ -645,6 +777,12 @@ const translations: Record<Lang, Record<string, string>> = {
         ram_tip_title: 'Маслаҳат',
         ram_tip_fasting: 'Ифторда хурмо ва сув билан бошлаш суннат. Оғир таомдан олдин шўрва енг.',
         ram_tip_eating: 'Саҳаргача оқсил ва секин парчаланадиган углевод енг (ош, манти, тухум). Сув кўп ичинг.',
+        ram_duas_title: 'Дуолар',
+        ram_dua_sahar: 'Саҳар',
+        ram_dua_iftar: 'Ифтор',
+        ram_prayed: 'ўқилди',
+        ram_day: 'Рамазон',
+        ram_tip_imminent: 'Ифтор яқин. Сув ва енгил таом тайёрлаб қўйинг. Шошманг, секин очинг.',
         fast_title: "Рўза (IF)",
         fast_active: 'Фаол',
         fast_subtitle: 'Интервалли рўза',
@@ -918,6 +1056,18 @@ const translations: Record<Lang, Record<string, string>> = {
         macro_protein_short: 'Оқсил',
         macro_fat_short: 'Ёғ',
         macro_carbs_short: 'Углевод',
+        water_error_add: "Сувни сақлашда хато",
+        water_error_undo: "Бекор қилишда хато",
+        water_error_load: "Сув маълумотлари юкланмади",
+        water_glasses_capped: "Стакан кўрсатуви чекланди",
+        btn_retry: "Қайта уриниш",
+        btn_undo: "Бекор қилиш",
+        bmi_low: "Кам вазн",
+        bmi_normal: "Норнал",
+        bmi_over: "Ортиқча",
+        bmi_obese: "Семизлик",
+        weight_error_load: "Вазн маълумотлари юкланмади",
+        shop_error_load: "Дўкон юкланмади",
 
     },
 
@@ -1086,6 +1236,12 @@ const translations: Record<Lang, Record<string, string>> = {
         ram_tip_title: 'Совет',
         ram_tip_fasting: 'По сунне ифтар начинают с фиников и воды. Перед тяжёлой едой съешьте суп.',
         ram_tip_eating: 'На сухур ешьте белок и медленные углеводы (плов, манты, яйца). Пейте много воды.',
+        ram_duas_title: 'Дуа',
+        ram_dua_sahar: 'Сухур',
+        ram_dua_iftar: 'Ифтар',
+        ram_prayed: 'прочитано',
+        ram_day: 'Рамадан',
+        ram_tip_imminent: 'Скоро ифтар. Подготовьте воду и лёгкую еду. Не спешите, открывайте медленно.',
         fast_title: 'Пост (IF)',
         fast_active: 'Активен',
         fast_subtitle: 'Интервальное голодание',
@@ -1359,6 +1515,18 @@ const translations: Record<Lang, Record<string, string>> = {
         macro_protein_short: 'Белки',
         macro_fat_short: 'Жиры',
         macro_carbs_short: 'Углев.',
+        water_error_add: "Ошибка сохранения воды",
+        water_error_undo: "Ошибка отмены",
+        water_error_load: "Не удалось загрузить данные о воде",
+        water_glasses_capped: "Отображение стаканов ограничено",
+        btn_retry: "Повторить",
+        btn_undo: "Отменить",
+        bmi_low: "Недостаточный вес",
+        bmi_normal: "Норма",
+        bmi_over: "Избыточный вес",
+        bmi_obese: "Ожирение",
+        weight_error_load: "Не удалось загрузить данные о весе",
+        shop_error_load: "Не удалось загрузить магазин",
 
     },
 
@@ -1800,6 +1968,18 @@ const translations: Record<Lang, Record<string, string>> = {
         macro_protein_short: 'Protein',
         macro_fat_short: 'Fat',
         macro_carbs_short: 'Carbs',
+        water_error_add: "Failed to save water",
+        water_error_undo: "Failed to undo",
+        water_error_load: "Couldn't load water data",
+        water_glasses_capped: "Glass display capped",
+        btn_retry: "Retry",
+        btn_undo: "Undo",
+        bmi_low: "Underweight",
+        bmi_normal: "Normal",
+        bmi_over: "Overweight",
+        bmi_obese: "Obese",
+        weight_error_load: "Couldn't load weight data",
+        shop_error_load: "Couldn't load shop",
 
     },
 }

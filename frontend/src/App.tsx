@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactElement } from 'react'
+import { useState, useEffect, useCallback, useMemo, type ReactElement } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from './supabase'
 import FoodSearch from './FoodSearch'
@@ -13,29 +13,48 @@ import PremiumSettingsScreen from './PremiumSettingsScreen'
 import ReferralScreen from './ReferralScreen'
 import LanguageScriptPicker from './LanguageScriptPicker'
 import { initTelegram, getTelegramId, getStartParam, showAlert } from './telegram'
-import { useTranslation, setLanguage, type Lang } from './i18n'
+import { useTranslation, setLangKey, getLang, type Lang } from './i18n'
 import { getTheme, toggleTheme, type Theme } from './theme'
+
+// ============================================================
+// TYPES & CONSTANTS
+// ============================================================
 
 type Tab = 'today' | 'scanner' | 'foods' | 'profile' | 'ramadan'
 type MealKey = 'breakfast' | 'lunch' | 'dinner' | 'snack'
+type Gender = 'male' | 'female'
+type Goal = 'lose' | 'maintain' | 'gain'
+
+interface OpenSearchDetail { mealType?: MealKey }
 
 const FONT = '"Plus Jakarta Sans", system-ui, sans-serif'
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 }
+const OPEN_SEARCH_EVENT = 'lokma:open-search'
+const PAYWALL_SEEN_KEY = 'lokma_paywall_seen'
 
 // Validation chegaralari
 const AGE_MIN = 13
 const AGE_MAX = 100
+const AGE_DEFAULT = 19
 const WEIGHT_MIN = 30
 const WEIGHT_MAX = 300
 const HEIGHT_MIN = 100
 const HEIGHT_MAX = 250
 
-const LANG_OPTIONS: { key: Lang; flag: string; label: string; sub?: string }[] = [
+// Formulalar
+const KCAL_ADJUST_LOSE = -500
+const KCAL_ADJUST_GAIN = 500
+
+const LANG_OPTIONS: readonly { key: Lang; flag: string; label: string; sub?: string }[] = [
   { key: 'uz-Latn', flag: '🇺🇿', label: "O'zbek", sub: 'Lotin' },
   { key: 'uz-Cyrl', flag: '🇺🇿', label: 'Ўзбек', sub: 'Кирилл' },
   { key: 'ru', flag: '🇷🇺', label: 'Русский' },
   { key: 'en', flag: '🇬🇧', label: 'English' },
-]
+] as const
+
+// ============================================================
+// APP
+// ============================================================
 
 function App() {
   const [tab, setTab] = useState<Tab>('today')
@@ -49,85 +68,98 @@ function App() {
   // Dashboard'dan kelgan "ovqat qo'shish" eventi uchun prefill
   const [prefilledMeal, setPrefilledMeal] = useState<MealKey | null>(null)
 
-  const [gender, setGender] = useState<'male' | 'female'>('male')
+  const [gender, setGender] = useState<Gender>('male')
   const [age, setAge] = useState('')
   const [weight, setWeight] = useState('')
   const [height, setHeight] = useState('')
   const [activity, setActivity] = useState('1.375')
-  const [goal, setGoal] = useState<'lose' | 'maintain' | 'gain'>('maintain')
+  const [goal, setGoal] = useState<Goal>('maintain')
   const [result, setResult] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  const checkOnboarding = useCallback(async () => {
+    const tgId = getTelegramId()
+    if (!tgId) {
+      // Dev/auth yo'q — onboarding'ni ko'rsatma, loading tugat
+      setLoading(false)
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('daily_calories_goal, trial_used')
+        .eq('telegram_id', tgId)
+        .maybeSingle()
+
+      if (error) {
+        console.error('[App] checkOnboarding fetch error:', error)
+      }
+
+      if (!data?.trial_used) {
+        const { error: trialErr } = await supabase.rpc('activate_trial', { p_telegram_id: tgId })
+        if (trialErr) console.error('[App] activate_trial error:', trialErr)
+
+        const startParam = getStartParam()
+        if (startParam?.startsWith('ref_')) {
+          const referrerId = parseInt(startParam.slice(4), 10)
+          if (Number.isFinite(referrerId) && referrerId > 0 && referrerId !== tgId) {
+            const { error: refErr } = await supabase.rpc('apply_referral', {
+              p_referrer_id: referrerId,
+              p_referred_id: tgId,
+            })
+            if (refErr) console.error('[App] apply_referral error:', refErr)
+          }
+        }
+      }
+
+      if (!data?.daily_calories_goal) setNeedsOnboarding(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     initTelegram()
-    checkLanguage()
-  }, [])
+    // Til tanlanganmi tekshir
+    const savedLang = getLang()
+    // getLang default'i 'uz-Latn' — biz aynan storage'da yozilganini bilishimiz kerak
+    const rawSaved = typeof window !== 'undefined' ? localStorage.getItem('lokma_lang') : null
+    if (!rawSaved) {
+      setNeedsLanguage(true)
+      setLoading(false)
+      return
+    }
+    void savedLang
+    void checkOnboarding()
+  }, [checkOnboarding])
 
-  // Dashboard'dagi MealBreakdownCard "Qo'shish" tugmasi event listener
+  // Dashboard'dagi MealBreakdownCard "Qo'shish" tugmasi
   useEffect(() => {
     function handleOpenSearch(e: Event) {
-      const detail = (e as CustomEvent).detail as { mealType?: MealKey } | undefined
-      const mealType = detail?.mealType
-      if (mealType) setPrefilledMeal(mealType)
+      const detail = (e as CustomEvent<OpenSearchDetail>).detail
+      if (detail?.mealType) setPrefilledMeal(detail.mealType)
       setTab('foods')
     }
-    window.addEventListener('lokma:open-search', handleOpenSearch as EventListener)
+    window.addEventListener(OPEN_SEARCH_EVENT, handleOpenSearch as EventListener)
     return () => {
-      window.removeEventListener('lokma:open-search', handleOpenSearch as EventListener)
+      window.removeEventListener(OPEN_SEARCH_EVENT, handleOpenSearch as EventListener)
     }
   }, [])
 
-  // Foods tabidan chiqilsa prefill tozalansin (boshqa joydan kirsa "stale" bo'lmasin)
+  // Foods tab'idan chiqilganda prefill'ni tozala
   useEffect(() => {
     if (tab !== 'foods' && prefilledMeal !== null) {
       setPrefilledMeal(null)
     }
   }, [tab, prefilledMeal])
 
-  async function checkLanguage() {
-    const savedLang = localStorage.getItem('lokma_lang')
-    if (!savedLang) {
-      setNeedsLanguage(true)
-      setLoading(false)
-      return
-    }
-    await checkOnboarding()
-  }
-
-  async function checkOnboarding() {
-    const tgId = getTelegramId()
-    const { data } = await supabase
-      .from('users')
-      .select('daily_calories_goal, trial_used')
-      .eq('telegram_id', tgId)
-      .maybeSingle()
-
-    if (!data?.trial_used) {
-      await supabase.rpc('activate_trial', { p_telegram_id: tgId })
-
-      const startParam = getStartParam()
-      if (startParam?.startsWith('ref_')) {
-        const referrerId = parseInt(startParam.slice(4), 10)
-        if (referrerId && referrerId !== tgId) {
-          await supabase.rpc('apply_referral', {
-            p_referrer_id: referrerId,
-            p_referred_id: tgId,
-          })
-        }
-      }
-    }
-
-    if (!data?.daily_calories_goal) setNeedsOnboarding(true)
-    setLoading(false)
-  }
-
-  const calculate = async () => {
+  const calculate = useCallback(async () => {
     const a = parseFloat(age)
     const w = parseFloat(weight)
     const h = parseFloat(height)
 
-    // Validation: bo'sh yoki chegara tashqarisida bo'lsa to'xtat
     if (!a || !w || !h) return
     if (a < AGE_MIN || a > AGE_MAX) {
       await showAlert(`Yosh ${AGE_MIN}–${AGE_MAX} oralig'ida bo'lishi kerak`)
@@ -142,28 +174,39 @@ function App() {
       return
     }
 
+    // Mifflin-St Jeor
     let bmr = 10 * w + 6.25 * h - 5 * a
     bmr += gender === 'male' ? 5 : -161
     let tdee = bmr * parseFloat(activity)
-    if (goal === 'lose') tdee -= 500
-    if (goal === 'gain') tdee += 500
+    if (goal === 'lose') tdee += KCAL_ADJUST_LOSE
+    if (goal === 'gain') tdee += KCAL_ADJUST_GAIN
 
     const finalKcal = Math.round(tdee)
     setResult(finalKcal)
     setSaving(true)
     setSaved(false)
 
+    const tgId = getTelegramId()
+    if (!tgId) {
+      setSaving(false)
+      await showAlert('Telegram ID topilmadi')
+      return
+    }
+
     const { error } = await supabase.from('users').upsert({
-      telegram_id: getTelegramId(),
+      telegram_id: tgId,
       age: a, weight_kg: w, height_cm: h,
       gender, activity, goal,
       daily_calories_goal: finalKcal,
     }, { onConflict: 'telegram_id' })
 
     setSaving(false)
-    if (error) { await showAlert('Xato: ' + error.message); return }
+    if (error) {
+      await showAlert('Xato: ' + error.message)
+      return
+    }
     setSaved(true)
-  }
+  }, [age, weight, height, gender, activity, goal])
 
   if (loading) {
     return (
@@ -187,7 +230,7 @@ function App() {
         onComplete={() => {
           setNeedsLanguage(false)
           setLoading(true)
-          checkOnboarding()
+          void checkOnboarding()
         }}
       />
     )
@@ -198,9 +241,9 @@ function App() {
       <Onboarding
         onComplete={() => {
           setNeedsOnboarding(false)
-          const seen = localStorage.getItem('lokma_paywall_seen')
+          const seen = localStorage.getItem(PAYWALL_SEEN_KEY)
           if (!seen) {
-            localStorage.setItem('lokma_paywall_seen', '1')
+            localStorage.setItem(PAYWALL_SEEN_KEY, '1')
             setTimeout(() => setShowPaywall(true), 600)
           }
         }}
@@ -208,12 +251,8 @@ function App() {
     )
   }
 
-  if (showPaywall) {
-    return <PaywallScreen onClose={() => setShowPaywall(false)} />
-  }
-  if (showReferral) {
-    return <ReferralScreen onClose={() => setShowReferral(false)} />
-  }
+  if (showPaywall) return <PaywallScreen onClose={() => setShowPaywall(false)} />
+  if (showReferral) return <ReferralScreen onClose={() => setShowReferral(false)} />
   if (showPremiumSettings) {
     return (
       <PremiumSettingsScreen
@@ -245,11 +284,15 @@ function App() {
           {tab === 'ramadan' && <RamadanScreen />}
           {tab === 'profile' && (
             <ProfileForm
-              {...{
-                gender, setGender, age, setAge, weight, setWeight, height, setHeight,
-                activity, setActivity, goal, setGoal, result, saving, saved, calculate,
-                onOpenPaywall: () => setShowPremiumSettings(true)
-              }}
+              gender={gender} setGender={setGender}
+              age={age} setAge={setAge}
+              weight={weight} setWeight={setWeight}
+              height={height} setHeight={setHeight}
+              activity={activity} setActivity={setActivity}
+              goal={goal} setGoal={setGoal}
+              result={result} saving={saving} saved={saved}
+              calculate={calculate}
+              onOpenPaywall={() => setShowPremiumSettings(true)}
             />
           )}
         </motion.div>
@@ -260,64 +303,64 @@ function App() {
   )
 }
 
+// ============================================================
+// BOTTOM NAV
+// ============================================================
+
 function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const { t } = useTranslation()
 
-  const iconProps = {
-    width: 22,
-    height: 22,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 2,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
-  }
+  const icons = useMemo<Record<Tab, ReactElement>>(() => {
+    const iconProps = {
+      width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none',
+      stroke: 'currentColor', strokeWidth: 2,
+      strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
+    }
+    return {
+      today: (
+        <svg {...iconProps}>
+          <path d="M3 12L12 4l9 8" />
+          <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" />
+        </svg>
+      ),
+      scanner: (
+        <svg {...iconProps}>
+          <path d="M4 9V7a2 2 0 0 1 2-2h2" />
+          <path d="M16 5h2a2 2 0 0 1 2 2v2" />
+          <path d="M20 15v2a2 2 0 0 1-2 2h-2" />
+          <path d="M8 19H6a2 2 0 0 1-2-2v-2" />
+          <circle cx="12" cy="12" r="3.5" />
+        </svg>
+      ),
+      foods: (
+        <svg {...iconProps}>
+          <path d="M7 3v8a2 2 0 0 0 2 2v8" />
+          <path d="M11 3v8" />
+          <path d="M9 3v6" />
+          <path d="M17 3c-1.5 0-3 2-3 5s1.5 4 3 4v9" />
+        </svg>
+      ),
+      ramadan: (
+        <svg {...iconProps}>
+          <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
+        </svg>
+      ),
+      profile: (
+        <svg {...iconProps}>
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+        </svg>
+      ),
+    }
+  }, [])
 
-  const icons: Record<Tab, ReactElement> = {
-    today: (
-      <svg {...iconProps}>
-        <path d="M3 12L12 4l9 8" />
-        <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" />
-      </svg>
-    ),
-    scanner: (
-      <svg {...iconProps}>
-        <path d="M4 9V7a2 2 0 0 1 2-2h2" />
-        <path d="M16 5h2a2 2 0 0 1 2 2v2" />
-        <path d="M20 15v2a2 2 0 0 1-2 2h-2" />
-        <path d="M8 19H6a2 2 0 0 1-2-2v-2" />
-        <circle cx="12" cy="12" r="3.5" />
-      </svg>
-    ),
-    foods: (
-      <svg {...iconProps}>
-        <path d="M7 3v8a2 2 0 0 0 2 2v8" />
-        <path d="M11 3v8" />
-        <path d="M9 3v6" />
-        <path d="M17 3c-1.5 0-3 2-3 5s1.5 4 3 4v9" />
-      </svg>
-    ),
-    ramadan: (
-      <svg {...iconProps}>
-        <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
-      </svg>
-    ),
-    profile: (
-      <svg {...iconProps}>
-        <circle cx="12" cy="8" r="4" />
-        <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
-      </svg>
-    ),
-  }
-
-  const items: { id: Tab; label: string }[] = [
+  const items = useMemo<{ id: Tab; label: string }[]>(() => [
     { id: 'today', label: t('nav_today') },
     { id: 'scanner', label: t('nav_scanner') },
     { id: 'foods', label: t('nav_foods') },
     { id: 'ramadan', label: t('nav_ramadan') },
     { id: 'profile', label: t('nav_profile') },
-  ]
+  ], [t])
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
@@ -368,28 +411,45 @@ function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   )
 }
 
-function ProfileForm(props: any) {
+// ============================================================
+// PROFILE FORM
+// ============================================================
+
+interface ProfileFormProps {
+  gender: Gender
+  setGender: (v: Gender) => void
+  age: string
+  setAge: (v: string) => void
+  weight: string
+  setWeight: (v: string) => void
+  height: string
+  setHeight: (v: string) => void
+  activity: string
+  setActivity: (v: string) => void
+  goal: Goal
+  setGoal: (v: Goal) => void
+  result: number | null
+  saving: boolean
+  saved: boolean
+  calculate: () => void | Promise<void>
+  onOpenPaywall: () => void
+}
+
+function ProfileForm({
+  gender, setGender, age, setAge, weight, setWeight, height, setHeight,
+  activity, setActivity, goal, setGoal, result, saving, saved, calculate, onOpenPaywall,
+}: ProfileFormProps) {
   const { t, lang } = useTranslation()
-  const {
-    gender, setGender, age, setAge, weight, setWeight, height, setHeight,
-    activity, setActivity, goal, setGoal, result, saving, saved, calculate, onOpenPaywall
-  } = props
   const [theme, setTheme] = useState<Theme>(getTheme())
-  function handleThemeToggle() {
-    const next = toggleTheme()
-    setTheme(next)
-  }
 
-  function handleLangChange(opt: typeof LANG_OPTIONS[number]) {
-    if (opt.key === 'uz-Latn') setLanguage('uz', 'Latn')
-    else if (opt.key === 'uz-Cyrl') setLanguage('uz', 'Cyrl')
-    else if (opt.key === 'ru') setLanguage('ru')
-    else setLanguage('en')
-  }
+  const handleThemeToggle = useCallback(() => {
+    setTheme(toggleTheme())
+  }, [])
 
-  // Age string ↔ number bridge
   const ageNum = parseInt(age, 10)
-  const ageValue = isNaN(ageNum) ? 19 : Math.max(AGE_MIN, Math.min(AGE_MAX, ageNum))
+  const ageValue = Number.isFinite(ageNum)
+    ? Math.max(AGE_MIN, Math.min(AGE_MAX, ageNum))
+    : AGE_DEFAULT
 
   return (
     <div className="min-h-screen pb-28 bg-[#ECEEF5] dark:bg-[#0F1419]">
@@ -404,7 +464,7 @@ function ProfileForm(props: any) {
           <p className="text-[13px] text-stone-500 dark:text-slate-400 font-medium mt-0.5">{t('profile_subtitle')}</p>
         </motion.div>
 
-        {/* --- Premium tugmasi --- */}
+        {/* Premium tugma */}
         <motion.button
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -427,7 +487,7 @@ function ProfileForm(props: any) {
           <div className="text-white text-xl">→</div>
         </motion.button>
 
-        {/* --- Til tanlash kartochkasi --- */}
+        {/* Til tanlash */}
         <motion.div
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -445,7 +505,7 @@ function ProfileForm(props: any) {
                 <motion.button
                   key={opt.key}
                   whileTap={{ scale: 0.96 }}
-                  onClick={() => handleLangChange(opt)}
+                  onClick={() => setLangKey(opt.key)}
                   className="flex items-center gap-2 px-3 py-2.5 rounded-2xl transition-colors text-left"
                   style={{
                     background: active ? '#5B6AD0' : 'var(--color-input-bg)',
@@ -470,7 +530,7 @@ function ProfileForm(props: any) {
           </div>
         </motion.div>
 
-        {/* --- Theme (Light/Dark) --- */}
+        {/* Theme */}
         <motion.div
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -507,7 +567,7 @@ function ProfileForm(props: any) {
           </div>
         </motion.div>
 
-        {/* --- Maqsad hisoblash kartochkasi --- */}
+        {/* Maqsad hisoblash */}
         <motion.div
           initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -647,6 +707,10 @@ function ProfileForm(props: any) {
   )
 }
 
+// ============================================================
+// HELPERS
+// ============================================================
+
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-3">
@@ -669,7 +733,7 @@ function PillButton({ active, onClick, children }: { active: boolean; onClick: (
   )
 }
 
-/* ─────────── SVG ikonlar (lucide-style) ─────────── */
+/* SVG ikonlar (lucide-style) */
 function IconTrendingDown({ color }: { color: string }) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react'
 import { motion } from 'framer-motion'
 import { ACHIEVEMENTS, getUnlocked, getAchTitle, getAchDesc, type Achievement } from './achievements'
 import { getTelegramId } from './telegram'
 import { useTranslation, type Lang } from './i18n'
 
 // ── Iconly-style SVG icons ────────────────────────────────
-function AIcon({
+const AIcon = memo(function AIcon({
     name,
     size = 18,
     color = 'currentColor',
@@ -52,71 +52,34 @@ function AIcon({
                 </svg>
             )
     }
-}
+})
 
-export function AchievementsScreen({ onBack }: { onBack: () => void }) {
-    const { t, lang } = useTranslation()
-    const [unlocked, setUnlocked] = useState<Set<string>>(new Set())
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-        getUnlocked(getTelegramId()).then(ids => {
-            setUnlocked(new Set(ids))
-            setLoading(false)
-        })
-    }, [])
-
-    const total = ACHIEVEMENTS.length
-    const done = ACHIEVEMENTS.filter(a => unlocked.has(a.id)).length
-    const pct = total ? Math.round((done / total) * 100) : 0
-
+// ── Skeleton card ──────────────────────────────────────────
+const SkeletonCard = memo(function SkeletonCard() {
     return (
-        <div className="min-h-screen pb-32" style={{ background: 'var(--color-bg)' }}>
-            <div className="px-5 pt-6 pb-4 flex items-center gap-3">
-                <button
-                    onClick={onBack}
-                    className="w-10 h-10 rounded-full bg-white dark:bg-[#1E252E] grid place-items-center shadow-sm text-stone-700 dark:text-slate-300"
-                    aria-label={t('back')}
-                >
-                    <AIcon name="arrowLeft" size={18} strokeWidth={2.2} />
-                </button>
-                <h1 className="text-2xl font-bold text-[#1a1a2e] dark:text-slate-100" style={{ fontFamily: 'Plus Jakarta Sans' }}>{t('ach_title')}</h1>
-            </div>
-
-            <div className="mx-5 mb-5 p-5 bg-white dark:bg-[#1E252E] rounded-[1.75rem]" style={{ boxShadow: '0 8px 24px -10px rgba(91,106,208,0.12)' }}>
-                <div className="flex items-end justify-between mb-3">
-                    <div>
-                        <div className="text-sm text-[#6b7280] dark:text-slate-400">{t('ach_count_label')}</div>
-                        <div className="text-3xl font-bold text-[#1a1a2e] dark:text-slate-100">
-                            {done}<span className="text-lg text-[#6b7280] dark:text-slate-400"> / {total}</span>
-                        </div>
-                    </div>
-                    <div className="text-2xl font-bold text-[#5B6AD0]">{pct}%</div>
-                </div>
-                <div className="h-2 bg-[#ECEEF5] dark:bg-[#0F1419] rounded-full overflow-hidden">
-                    <motion.div
-                        className="h-full bg-[#5B6AD0]"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ duration: 0.8, ease: [0.34, 1.56, 0.64, 1] }}
-                    />
-                </div>
-            </div>
-
-            {loading ? (
-                <div className="text-center text-[#6b7280] dark:text-slate-400 mt-12">{t('loading')}</div>
-            ) : (
-                <div className="px-5 grid grid-cols-3 gap-3">
-                    {ACHIEVEMENTS.map((a, i) => (
-                        <Card key={a.id} a={a} unlocked={unlocked.has(a.id)} delay={i * 0.04} t={t} lang={lang} />
-                    ))}
-                </div>
-            )}
+        <div className="p-3 rounded-2xl bg-white dark:bg-[#1E252E] animate-pulse"
+            style={{ boxShadow: '0 8px 24px -10px rgba(91,106,208,0.12)' }}>
+            <div className="w-8 h-8 bg-[#ECEEF5] dark:bg-[#2A3340] rounded-full mx-auto mb-2" />
+            <div className="h-2 bg-[#ECEEF5] dark:bg-[#2A3340] rounded-full mx-auto mb-1 w-3/4" />
+            <div className="h-2 bg-[#ECEEF5] dark:bg-[#2A3340] rounded-full mx-auto w-1/2" />
         </div>
     )
-}
+})
 
-function Card({ a, unlocked, delay, t, lang }: { a: Achievement; unlocked: boolean; delay: number; t: (k: string) => string; lang: Lang }) {
+// ── Achievement card ───────────────────────────────────────
+const Card = memo(function Card({
+    a,
+    unlocked,
+    delay,
+    t,
+    lang,
+}: {
+    a: Achievement
+    unlocked: boolean
+    delay: number
+    t: (k: string) => string
+    lang: Lang
+}) {
     return (
         <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -126,8 +89,12 @@ function Card({ a, unlocked, delay, t, lang }: { a: Achievement; unlocked: boole
             style={{ boxShadow: '0 8px 24px -10px rgba(91,106,208,0.12)' }}
         >
             <div className="text-3xl mb-1">{a.icon}</div>
-            <div className="text-[11px] font-semibold text-[#1a1a2e] dark:text-slate-100 leading-tight mb-1">{getAchTitle(a, lang)}</div>
-            <div className="text-[10px] text-[#6b7280] dark:text-slate-400 leading-tight mb-2 min-h-[24px]">{getAchDesc(a, lang)}</div>
+            <div className="text-[11px] font-semibold text-[#1a1a2e] dark:text-slate-100 leading-tight mb-1">
+                {getAchTitle(a, lang)}
+            </div>
+            <div className="text-[10px] text-[#6b7280] dark:text-slate-400 leading-tight mb-2 min-h-[24px]">
+                {getAchDesc(a, lang)}
+            </div>
             <div className={`text-[10px] font-bold flex items-center justify-center gap-1 ${unlocked ? 'text-[#5B6AD0]' : 'text-[#9ca3af]'}`}>
                 {unlocked ? (
                     <span>{t('ach_done_badge')}</span>
@@ -144,5 +111,117 @@ function Card({ a, unlocked, delay, t, lang }: { a: Achievement; unlocked: boole
                 </div>
             )}
         </motion.div>
+    )
+})
+
+// ── Main ───────────────────────────────────────────────────
+export function AchievementsScreen({ onBack }: { onBack: () => void }) {
+    const { t, lang } = useTranslation()
+    const [unlocked, setUnlocked] = useState<Set<string>>(new Set())
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const mountedRef = useRef(true)
+
+    const load = useCallback(async () => {
+        setLoading(true)
+        setError(null)
+        try {
+            const ids = await getUnlocked(getTelegramId())
+            if (!mountedRef.current) return
+            setUnlocked(new Set(ids))
+        } catch {
+            if (!mountedRef.current) return
+            setError(t('error_generic'))
+        } finally {
+            if (mountedRef.current) setLoading(false)
+        }
+    }, [t])
+
+    useEffect(() => {
+        mountedRef.current = true
+        load()
+        return () => { mountedRef.current = false }
+    }, [load])
+
+    const { total, done, pct } = useMemo(() => {
+        const total = ACHIEVEMENTS.length
+        const done = ACHIEVEMENTS.filter(a => unlocked.has(a.id)).length
+        const pct = total ? Math.round((done / total) * 100) : 0
+        return { total, done, pct }
+    }, [unlocked])
+
+    return (
+        <div className="min-h-screen pb-32" style={{ background: 'var(--color-bg)' }}>
+            {/* Header */}
+            <div className="px-5 pt-6 pb-4 flex items-center gap-3">
+                <button
+                    onClick={onBack}
+                    className="w-10 h-10 rounded-full bg-white dark:bg-[#1E252E] grid place-items-center shadow-sm text-stone-700 dark:text-slate-300"
+                    aria-label={t('back')}
+                >
+                    <AIcon name="arrowLeft" size={18} strokeWidth={2.2} />
+                </button>
+                <h1
+                    className="text-2xl font-bold text-[#1a1a2e] dark:text-slate-100"
+                    style={{ fontFamily: 'Plus Jakarta Sans' }}
+                >
+                    {t('ach_title')}
+                </h1>
+            </div>
+
+            {/* Progress card */}
+            <div
+                className="mx-5 mb-5 p-5 bg-white dark:bg-[#1E252E] rounded-[1.75rem]"
+                style={{ boxShadow: '0 8px 24px -10px rgba(91,106,208,0.12)' }}
+            >
+                <div className="flex items-end justify-between mb-3">
+                    <div>
+                        <div className="text-sm text-[#6b7280] dark:text-slate-400">{t('ach_count_label')}</div>
+                        <div className="text-3xl font-bold text-[#1a1a2e] dark:text-slate-100">
+                            {done}
+                            <span className="text-lg text-[#6b7280] dark:text-slate-400"> / {total}</span>
+                        </div>
+                    </div>
+                    <div className="text-2xl font-bold text-[#5B6AD0]">{pct}%</div>
+                </div>
+                <div className="h-2 bg-[#ECEEF5] dark:bg-[#0F1419] rounded-full overflow-hidden">
+                    <motion.div
+                        className="h-full bg-[#5B6AD0]"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.8, ease: [0.34, 1.56, 0.64, 1] }}
+                    />
+                </div>
+            </div>
+
+            {/* Grid */}
+            <div className="px-5 grid grid-cols-3 gap-3">
+                {loading
+                    ? Array.from({ length: 9 }).map((_, i) => <SkeletonCard key={i} />)
+                    : error
+                        ? (
+                            <div className="col-span-3 text-center py-10">
+                                <p className="text-sm text-[#6b7280] dark:text-slate-400 mb-3">{error}</p>
+                                <button
+                                    onClick={load}
+                                    className="text-sm font-bold text-[#5B6AD0] px-4 py-2 rounded-full bg-[#DDE3F5] dark:bg-[#1E252E]"
+                                >
+                                    {t('retry')}
+                                </button>
+                            </div>
+                        )
+                        : ACHIEVEMENTS.map((a, i) => (
+                            <Card
+                                key={a.id}
+                                a={a}
+                                unlocked={unlocked.has(a.id)}
+                                delay={i * 0.04}
+                                t={t}
+                                lang={lang}
+                            />
+                        ))
+                }
+            </div>
+        </div>
     )
 }

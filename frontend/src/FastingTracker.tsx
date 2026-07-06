@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+// src/FastingTracker.tsx
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     FASTING_PRESETS,
@@ -19,15 +20,29 @@ import {
     type RamadanStatus,
 } from './ramadan';
 import { useTranslation } from './i18n';
+import { hapticImpact, hapticNotify } from './telegram';
 
 interface Props {
     telegramId: number;
 }
 
-const spring = { type: 'spring', stiffness: 280, damping: 26 } as const;
+const SPRING = { type: 'spring' as const, stiffness: 280, damping: 26 };
+const EASE_BACK = [0.34, 1.56, 0.64, 1] as const;
 
-// ── Iconly-style SVG icons ────────────────────────────────
-function FIcon({
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+function safeNum(v: unknown, fallback = 0): number {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+// ============================================================================
+// ICONS (memoized)
+// ============================================================================
+
+const FIcon = memo(function FIcon({
     name,
     size = 18,
     color = 'currentColor',
@@ -82,51 +97,116 @@ function FIcon({
                 </svg>
             );
     }
-}
+});
 
-export function FastingTracker({ telegramId }: Props) {
+// ============================================================================
+// SKELETON
+// ============================================================================
+
+const SkeletonCard = memo(function SkeletonCard() {
+    return (
+        <div className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-5 shadow-[0_8px_24px_-10px_rgba(91,106,208,0.12)] animate-pulse">
+            <div className="flex items-center justify-between mb-4">
+                <div className="space-y-1.5 flex-1">
+                    <div className="h-3.5 bg-[#ECEEF5] dark:bg-[#252D38] rounded-full w-24" />
+                    <div className="h-2.5 bg-[#ECEEF5] dark:bg-[#252D38] rounded-full w-36" />
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-[#ECEEF5] dark:bg-[#252D38]" />
+            </div>
+            <div className="grid grid-cols-4 gap-2 mb-4">
+                {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="h-14 rounded-2xl bg-[#ECEEF5] dark:bg-[#252D38]" />
+                ))}
+            </div>
+            <div className="h-12 rounded-2xl bg-[#ECEEF5] dark:bg-[#252D38]" />
+        </div>
+    );
+});
+
+// ============================================================================
+// MAIN
+// ============================================================================
+
+function FastingTrackerBase({ telegramId }: Props) {
     const { t } = useTranslation();
     const [active, setActive] = useState<FastingSession | null>(null);
     const [recent, setRecent] = useState<FastingSession[]>([]);
     const [selectedHours, setSelectedHours] = useState<number>(16);
     const [loading, setLoading] = useState(true);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [tick, setTick] = useState(0);
     const [ramadanStatus, setRamadanStatus] = useState<RamadanStatus | null>(null);
+    const mountedRef = useRef(true);
 
-    async function refresh() {
-        const a = await getActiveFast(telegramId);
-        setActive(a);
-        const r = await getRecentFasts(telegramId, 5);
-        setRecent(r);
-        if (isRamadanActive()) {
-            try {
-                setRamadanStatus(await getRamadanStatus());
-            } catch {
-                setRamadanStatus(null);
+    const refresh = useCallback(async () => {
+        setError(null);
+        try {
+            const [a, r] = await Promise.all([
+                getActiveFast(telegramId),
+                getRecentFasts(telegramId, 5),
+            ]);
+            if (!mountedRef.current) return;
+            setActive(a);
+            setRecent(Array.isArray(r) ? r : []);
+
+            if (isRamadanActive()) {
+                try {
+                    const status = await getRamadanStatus();
+                    if (!mountedRef.current) return;
+                    setRamadanStatus(status);
+                } catch {
+                    if (!mountedRef.current) return;
+                    setRamadanStatus(null);
+                }
             }
+        } catch {
+            if (!mountedRef.current) return;
+            setError(t('error_generic'));
+        } finally {
+            if (mountedRef.current) setLoading(false);
         }
-        setLoading(false);
-    }
+    }, [telegramId, t]);
 
     useEffect(() => {
-        refresh();
-    }, [telegramId]);
+        mountedRef.current = true;
+        void refresh();
+        return () => { mountedRef.current = false; };
+    }, [refresh]);
 
+    // Live tick — faqat active bo'lganda
     useEffect(() => {
         if (!active) return;
-        const id = setInterval(() => setTick((tk) => tk + 1), 1000);
+        const id = setInterval(() => {
+            if (mountedRef.current) setTick((tk) => tk + 1);
+        }, 1000);
         return () => clearInterval(id);
     }, [active]);
 
-    async function handleStart() {
-        setLoading(true);
-        const s = await startFast(telegramId, selectedHours);
-        if (s) setActive(s);
-        setLoading(false);
-    }
+    const handleStart = useCallback(async () => {
+        if (busy) return;
+        hapticImpact('light');
+        setBusy(true);
+        try {
+            const s = await startFast(telegramId, selectedHours);
+            if (!mountedRef.current) return;
+            if (s) {
+                setActive(s);
+                hapticNotify('success');
+            } else {
+                hapticNotify('error');
+            }
+        } catch {
+            if (mountedRef.current) hapticNotify('error');
+        } finally {
+            if (mountedRef.current) setBusy(false);
+        }
+    }, [busy, telegramId, selectedHours]);
 
-    async function handleStartRamadan() {
-        setLoading(true);
+    const handleStartRamadan = useCallback(async () => {
+        if (busy) return;
+        hapticImpact('light');
+        setBusy(true);
         try {
             const times = await getPrayerTimes();
             const fajr = parseTimeToToday(times.fajr);
@@ -135,10 +215,7 @@ export function FastingTracker({ telegramId }: Props) {
 
             let startTime = fajr;
             let endTime = maghrib;
-            if (now < fajr) {
-                startTime = fajr;
-                endTime = maghrib;
-            } else if (now >= maghrib) {
+            if (now >= maghrib) {
                 const tomorrow = new Date();
                 tomorrow.setDate(tomorrow.getDate() + 1);
                 const ttimes = await getPrayerTimes(tomorrow);
@@ -146,32 +223,72 @@ export function FastingTracker({ telegramId }: Props) {
                 endTime = parseTimeToToday(ttimes.maghrib, tomorrow);
             }
 
-            const targetHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60);
-            const s = await startFast(telegramId, Math.round(targetHours * 10) / 10, startTime.toISOString());
-            if (s) setActive(s);
+            const targetHours = Math.max(
+                1,
+                (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60)
+            );
+            const s = await startFast(
+                telegramId,
+                Math.round(targetHours * 10) / 10,
+                startTime.toISOString()
+            );
+            if (!mountedRef.current) return;
+            if (s) {
+                setActive(s);
+                hapticNotify('success');
+            } else {
+                hapticNotify('error');
+            }
         } catch (e) {
-            console.error('handleStartRamadan error:', e);
+            console.error('[fasting] startRamadan error:', e);
+            if (mountedRef.current) hapticNotify('error');
+        } finally {
+            if (mountedRef.current) setBusy(false);
         }
-        setLoading(false);
-    }
+    }, [busy, telegramId]);
 
-    async function handleEnd() {
-        if (!active) return;
-        setLoading(true);
-        const elapsed = calcElapsedHours(active.start_time);
-        const completed = elapsed >= active.target_hours;
-        const ok = await endFast(active.id, completed);
-        if (ok) {
-            setActive(null);
-            await refresh();
+    const handleEnd = useCallback(async () => {
+        if (!active || busy) return;
+        hapticImpact('light');
+        setBusy(true);
+        try {
+            const elapsed = calcElapsedHours(active.start_time);
+            const completed = elapsed >= active.target_hours;
+            const ok = await endFast(active.id, completed);
+            if (!mountedRef.current) return;
+            if (ok) {
+                setActive(null);
+                hapticNotify(completed ? 'success' : 'warning');
+                void refresh();
+            } else {
+                hapticNotify('error');
+            }
+        } catch {
+            if (mountedRef.current) hapticNotify('error');
+        } finally {
+            if (mountedRef.current) setBusy(false);
         }
-        setLoading(false);
-    }
+    }, [active, busy, refresh]);
 
-    if (loading && !active) {
+    const handleSelectHours = useCallback((h: number) => {
+        hapticImpact('light');
+        setSelectedHours(h);
+    }, []);
+
+    // ── Loading skeleton ──
+    if (loading && !active) return <SkeletonCard />;
+
+    // ── Error ──
+    if (error && !active) {
         return (
-            <div className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-5 shadow-[0_8px_24px_-10px_rgba(91,106,208,0.12)]">
-                <p className="text-sm text-gray-400">{t('loading')}</p>
+            <div className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-5 shadow-[0_8px_24px_-10px_rgba(91,106,208,0.12)] text-center">
+                <p className="text-sm text-gray-400 dark:text-slate-500 mb-2">{error}</p>
+                <button
+                    onClick={() => { setLoading(true); void refresh(); }}
+                    className="text-sm font-bold text-[#5B6AD0] px-4 py-2 rounded-full bg-[#DDE3F5] dark:bg-[#252D38]"
+                >
+                    {t('retry')}
+                </button>
             </div>
         );
     }
@@ -182,12 +299,14 @@ export function FastingTracker({ telegramId }: Props) {
         <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={spring}
+            transition={SPRING}
             className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-5 shadow-[0_8px_24px_-10px_rgba(91,106,208,0.12)]"
         >
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h3 className="text-base font-bold text-gray-900 dark:text-slate-100">{t('fast_title')}</h3>
+                    <h3 className="text-base font-bold text-gray-900 dark:text-slate-100">
+                        {t('fast_title')}
+                    </h3>
                     <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
                         {active ? t('fast_active') : t('fast_subtitle')}
                     </p>
@@ -205,7 +324,7 @@ export function FastingTracker({ telegramId }: Props) {
                     <RamadanBanner
                         status={ramadanStatus!}
                         onStart={handleStartRamadan}
-                        loading={loading}
+                        loading={busy}
                         t={t}
                     />
                 )}
@@ -218,16 +337,16 @@ export function FastingTracker({ telegramId }: Props) {
                         session={active}
                         tick={tick}
                         onEnd={handleEnd}
-                        loading={loading}
+                        loading={busy}
                         t={t}
                     />
                 ) : (
                     <StartFastView
                         key="start"
                         selectedHours={selectedHours}
-                        setSelectedHours={setSelectedHours}
+                        onSelectHours={handleSelectHours}
                         onStart={handleStart}
-                        loading={loading}
+                        loading={busy}
                         t={t}
                     />
                 )}
@@ -260,7 +379,11 @@ export function FastingTracker({ telegramId }: Props) {
     );
 }
 
-function RamadanBanner({
+// ============================================================================
+// RAMADAN BANNER (memoized)
+// ============================================================================
+
+const RamadanBanner = memo(function RamadanBanner({
     status,
     onStart,
     loading,
@@ -286,7 +409,7 @@ function RamadanBanner({
             className="mb-4 rounded-2xl p-4 relative overflow-hidden"
             style={{ background: 'linear-gradient(135deg, #3D4FAA 0%, #5B6AD0 100%)' }}
         >
-            <div className="absolute -top-3 -right-3 opacity-15 select-none">
+            <div className="absolute -top-3 -right-3 opacity-15 select-none pointer-events-none">
                 <FIcon name="moon" size={80} color="#ffffff" fill="#ffffff" strokeWidth={1.5} />
             </div>
             <div className="relative">
@@ -308,17 +431,21 @@ function RamadanBanner({
             </div>
         </motion.div>
     );
-}
+});
 
-function StartFastView({
+// ============================================================================
+// START VIEW (memoized)
+// ============================================================================
+
+const StartFastView = memo(function StartFastView({
     selectedHours,
-    setSelectedHours,
+    onSelectHours,
     onStart,
     loading,
     t,
 }: {
     selectedHours: number;
-    setSelectedHours: (h: number) => void;
+    onSelectHours: (h: number) => void;
     onStart: () => void;
     loading: boolean;
     t: (k: string) => string;
@@ -334,7 +461,7 @@ function StartFastView({
                     <motion.button
                         key={p.label}
                         whileTap={{ scale: 0.95 }}
-                        onClick={() => setSelectedHours(p.hours)}
+                        onClick={() => onSelectHours(p.hours)}
                         className={`py-3 px-2 rounded-2xl text-center transition-colors ${selectedHours === p.hours
                             ? 'bg-[#5B6AD0] text-white'
                             : 'bg-[#ECEEF5] dark:bg-[#252D38] text-gray-700 dark:text-slate-300'
@@ -361,24 +488,31 @@ function StartFastView({
             </motion.button>
         </motion.div>
     );
-}
+});
 
-function ActiveFastView({
+// ============================================================================
+// ACTIVE VIEW (memoized)
+// ============================================================================
+
+const ActiveFastView = memo(function ActiveFastView({
     session,
     onEnd,
     loading,
     t,
 }: {
     session: FastingSession;
-    tick: number;
+    tick: number; // eslint-disable-line @typescript-eslint/no-unused-vars
     onEnd: () => void;
     loading: boolean;
     t: (k: string) => string;
 }) {
-    const elapsed = calcElapsedHours(session.start_time);
-    const progress = calcProgress(session.start_time, session.target_hours);
-    const remaining = Math.max(session.target_hours - elapsed, 0);
-    const isComplete = progress >= 100;
+    // useMemo — recalculated on tick change (parent re-renders)
+    const { elapsed, progress, remaining, isComplete } = useMemo(() => {
+        const el = calcElapsedHours(session.start_time);
+        const pr = Math.min(100, Math.max(0, safeNum(calcProgress(session.start_time, session.target_hours))));
+        const rem = Math.max(safeNum(session.target_hours) - el, 0);
+        return { elapsed: el, progress: pr, remaining: rem, isComplete: pr >= 100 };
+    }, [session.start_time, session.target_hours]);
 
     const radius = 70;
     const circumference = 2 * Math.PI * radius;
@@ -393,7 +527,14 @@ function ActiveFastView({
         >
             <div className="relative w-44 h-44 flex items-center justify-center">
                 <svg className="absolute inset-0 -rotate-90" viewBox="0 0 160 160">
-                    <circle cx="80" cy="80" r={radius} className="stroke-[#ECEEF5] dark:stroke-[#252D38]" strokeWidth="10" fill="none" />
+                    <circle
+                        cx="80"
+                        cy="80"
+                        r={radius}
+                        className="stroke-[#ECEEF5] dark:stroke-[#252D38]"
+                        strokeWidth="10"
+                        fill="none"
+                    />
                     <motion.circle
                         cx="80"
                         cy="80"
@@ -405,7 +546,7 @@ function ActiveFastView({
                         strokeDasharray={circumference}
                         initial={{ strokeDashoffset: circumference }}
                         animate={{ strokeDashoffset: offset }}
-                        transition={{ duration: 0.8, ease: [0.34, 1.56, 0.64, 1] }}
+                        transition={{ duration: 0.8, ease: EASE_BACK }}
                     />
                 </svg>
 
@@ -438,4 +579,8 @@ function ActiveFastView({
             </motion.button>
         </motion.div>
     );
-}
+});
+
+const FastingTracker = memo(FastingTrackerBase);
+export { FastingTracker };
+export default FastingTracker;
