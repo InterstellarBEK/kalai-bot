@@ -1,8 +1,8 @@
 // ramadan.ts — Lokma Ramazon rejimi
-// Premium refactoring: Result<T> API, TTL cache, inflight dedup,
-// timeout + retry, AbortController support, safe date parsing.
+// HYBRID manba: namoz-vaqti.uz PRIMARY (mahalliy O'zbek hisobi),
+// Aladhan API FALLBACK (tarixiy sanalar yoki proxy fail bo'lganda).
+// Result<T> API, TTL cache, inflight dedup, timeout + retry.
 // Yil bo'yi ochiq: namoz vaqtlari va ro'za oynasi doim hisoblanadi.
-// isRamadan flag'i faqat kosmetik farq uchun (countdown vs iftor hero).
 
 import {
     type Result,
@@ -31,6 +31,8 @@ export interface Region {
     name: string
     lat: number
     lon: number
+    /** namoz-vaqti.uz proxy slug — bo'lmasa Aladhan fallback */
+    slug?: string
 }
 
 export interface PrayerTimes {
@@ -41,6 +43,8 @@ export interface PrayerTimes {
     maghrib: string
     isha: string
     date: string
+    /** Manba — debug/tahlil uchun */
+    source?: 'namoz-vaqti.uz' | 'aladhan'
 }
 
 export interface RamadanStatus {
@@ -53,23 +57,23 @@ export interface RamadanStatus {
 }
 
 // ============================================================
-// REGIONS — 14 O'zbekiston viloyati
+// REGIONS — 14 O'zbekiston viloyati (slug namoz-vaqti.uz'ga mos)
 // ============================================================
 export const UZ_REGIONS: Region[] = [
-    { id: 'tashkent_city', name: 'Toshkent sh.', lat: 41.2995, lon: 69.2401 },
-    { id: 'tashkent', name: 'Toshkent vil.', lat: 41.0156, lon: 69.3471 },
-    { id: 'andijan', name: 'Andijon', lat: 40.7821, lon: 72.3442 },
-    { id: 'bukhara', name: 'Buxoro', lat: 39.7681, lon: 64.4556 },
-    { id: 'fergana', name: "Farg'ona", lat: 40.3864, lon: 71.7864 },
-    { id: 'jizzakh', name: 'Jizzax', lat: 40.1158, lon: 67.8422 },
-    { id: 'namangan', name: 'Namangan', lat: 40.9983, lon: 71.6726 },
-    { id: 'navoi', name: 'Navoiy', lat: 40.0844, lon: 65.3792 },
-    { id: 'kashkadarya', name: 'Qashqadaryo', lat: 38.8606, lon: 65.7886 },
-    { id: 'samarkand', name: 'Samarqand', lat: 39.6542, lon: 66.9597 },
-    { id: 'sirdarya', name: 'Sirdaryo', lat: 40.4897, lon: 68.7842 },
-    { id: 'surkhandarya', name: 'Surxondaryo', lat: 37.2242, lon: 67.2783 },
-    { id: 'khorezm', name: 'Xorazm', lat: 41.5500, lon: 60.6333 },
-    { id: 'karakalpakstan', name: "Qoraqalpog'iston", lat: 42.4531, lon: 59.6103 },
+    { id: 'tashkent_city', name: 'Toshkent sh.', lat: 41.2995, lon: 69.2401, slug: 'toshkent-shahri' },
+    { id: 'tashkent', name: 'Toshkent vil.', lat: 41.0156, lon: 69.3471, slug: 'toshkent-viloyati' },
+    { id: 'andijan', name: 'Andijon', lat: 40.7821, lon: 72.3442, slug: 'andijon' },
+    { id: 'bukhara', name: 'Buxoro', lat: 39.7681, lon: 64.4556, slug: 'buxoro' },
+    { id: 'fergana', name: "Farg'ona", lat: 40.3864, lon: 71.7864, slug: 'fargona' },
+    { id: 'jizzakh', name: 'Jizzax', lat: 40.1158, lon: 67.8422, slug: 'jizzax' },
+    { id: 'namangan', name: 'Namangan', lat: 40.9983, lon: 71.6726, slug: 'namangan' },
+    { id: 'navoi', name: 'Navoiy', lat: 40.0844, lon: 65.3792, slug: 'navoiy' },
+    { id: 'kashkadarya', name: 'Qashqadaryo', lat: 38.8606, lon: 65.7886, slug: 'qarshi-shahri' },
+    { id: 'samarkand', name: 'Samarqand', lat: 39.6542, lon: 66.9597, slug: 'samarqand' },
+    { id: 'sirdarya', name: 'Sirdaryo', lat: 40.4897, lon: 68.7842, slug: 'guliston' },
+    { id: 'surkhandarya', name: 'Surxondaryo', lat: 37.2242, lon: 67.2783, slug: 'termiz' },
+    { id: 'khorezm', name: 'Xorazm', lat: 41.5500, lon: 60.6333, slug: 'urganch' },
+    { id: 'karakalpakstan', name: "Qoraqalpog'iston", lat: 42.4531, lon: 59.6103, slug: 'nukus' },
 ]
 
 const DEFAULT_REGION_ID = 'tashkent_city'
@@ -210,7 +214,67 @@ async function fetchWithTimeout(url: string, signal?: AbortSignal): Promise<Resp
     }
 }
 
-async function fetchPrayerTimesOnce(
+// ─── SOURCE 1: namoz-vaqti.uz proxy (mahalliy O'zbek hisobi) ────
+// Faqat BUGUNGI vaqtlar mavjud (upstream bugungisini beradi)
+
+interface NamozVaqtiResponse {
+    today?: {
+        times?: {
+            bomdod?: string
+            quyosh?: string
+            peshin?: string
+            asr?: string
+            shom?: string
+            xufton?: string
+        }
+    }
+}
+
+function normalizeHHMM(s: string | undefined): string {
+    if (!s) return '00:00'
+    // "03:45" yoki "3:45" → "03:45"
+    const m = s.trim().match(/^(\d{1,2}):(\d{2})/)
+    if (!m) return '00:00'
+    return `${m[1].padStart(2, '0')}:${m[2]}`
+}
+
+async function fetchFromNamozVaqti(
+    slug: string,
+    dateStr: string,
+    signal?: AbortSignal
+): Promise<PrayerTimes> {
+    const url = `/api/prayer-times?slug=${encodeURIComponent(slug)}`
+    const res = await fetchWithTimeout(url, signal)
+    if (!res.ok) {
+        throw new LokmaError('server', `namoz-vaqti.uz proxy ${res.status}`, {
+            retryable: res.status >= 500,
+            context: { url, slug },
+        })
+    }
+
+    const json = (await res.json()) as NamozVaqtiResponse
+    const times = json?.today?.times
+    if (!times || !times.bomdod || !times.shom) {
+        throw new LokmaError('server', 'namoz-vaqti.uz: times yo\'q', {
+            context: { json, slug },
+        })
+    }
+
+    return {
+        fajr: normalizeHHMM(times.bomdod),
+        sunrise: normalizeHHMM(times.quyosh),
+        dhuhr: normalizeHHMM(times.peshin),
+        asr: normalizeHHMM(times.asr),
+        maghrib: normalizeHHMM(times.shom),
+        isha: normalizeHHMM(times.xufton),
+        date: dateStr,
+        source: 'namoz-vaqti.uz',
+    }
+}
+
+// ─── SOURCE 2: Aladhan API (xalqaro fallback) ────────────
+
+async function fetchFromAladhan(
     region: Region,
     dateStr: string,
     signal?: AbortSignal
@@ -240,7 +304,34 @@ async function fetchPrayerTimesOnce(
         maghrib: t.Maghrib.slice(0, 5),
         isha: (t.Isha ?? '00:00').slice(0, 5),
         date: dateStr,
+        source: 'aladhan',
     }
+}
+
+// ─── HYBRID: namoz-vaqti PRIMARY, Aladhan FALLBACK ───────
+
+async function fetchPrayerTimesOnce(
+    region: Region,
+    dateStr: string,
+    signal?: AbortSignal
+): Promise<PrayerTimes> {
+    const todayStr = toLocalDateStr(new Date())
+    const isToday = dateStr === todayStr
+
+    // 1) BUGUN + slug bor → namoz-vaqti.uz PRIMARY
+    if (isToday && region.slug) {
+        try {
+            return await fetchFromNamozVaqti(region.slug, dateStr, signal)
+        } catch (e) {
+            // AbortError → yuqoriga tashla, retry qilma
+            if (e instanceof Error && e.name === 'AbortError') throw e
+            console.warn('[prayer] namoz-vaqti.uz fail, Aladhan fallback:', e)
+            // Fallback davom etadi ↓
+        }
+    }
+
+    // 2) FALLBACK: Aladhan (tarixiy sana yoki proxy fail)
+    return await fetchFromAladhan(region, dateStr, signal)
 }
 
 async function fetchPrayerTimesWithRetry(
