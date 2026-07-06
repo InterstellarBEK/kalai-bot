@@ -57,6 +57,7 @@ const DISPLAY_ORDER: ChallengeType[] = ['water_goal', 'log_3_meals', 'calorie_ba
 const CALORIE_BALANCE_MIN = 0.8
 const CALORIE_BALANCE_MAX = 1.1
 const DEFAULT_CALORIE_GOAL = 2000
+const DEFAULT_WATER_GOAL_ML = 2500
 
 // ============================================================
 // AUTH & DATE HELPERS
@@ -250,12 +251,16 @@ export async function getTodayChallengesResult(): Promise<Result<Challenge[]>> {
     const rowsRes = wrapPgResult<ChallengeRow[]>(rowsResp, 'getTodayChallenges', { tgId, date })
     if (!rowsRes.ok) return { ok: false, error: rowsRes.error }
 
-    const [waterMl, waterGoalMl, mealCount, cal] = await Promise.all([
+    const [waterMlRes, waterGoalMlRes, mealCount, cal] = await Promise.all([
         getTodayWater(),
         getWaterGoal(),
         getTodayMealCount(tgId),
         getTodayCalories(tgId),
     ])
+
+    // Result<number> unwrap — xato bo'lsa 0 (challenge shunchaki incomplete ko'rinadi)
+    const waterMl = waterMlRes.ok ? waterMlRes.data : 0
+    const waterGoalMl = waterGoalMlRes.ok ? waterGoalMlRes.data : DEFAULT_WATER_GOAL_ML
 
     const ctx = { waterMl, waterGoalMl, mealCount, cal }
     const result = rowsRes.data

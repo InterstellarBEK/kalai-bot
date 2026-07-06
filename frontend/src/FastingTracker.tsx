@@ -152,9 +152,9 @@ function FastingTrackerBase({ telegramId }: Props) {
 
             if (isRamadanActive()) {
                 try {
-                    const status = await getRamadanStatus();
+                    const statusRes = await getRamadanStatus();
                     if (!mountedRef.current) return;
-                    setRamadanStatus(status);
+                    setRamadanStatus(statusRes.ok ? statusRes.data : null);
                 } catch {
                     if (!mountedRef.current) return;
                     setRamadanStatus(null);
@@ -208,7 +208,13 @@ function FastingTrackerBase({ telegramId }: Props) {
         hapticImpact('light');
         setBusy(true);
         try {
-            const times = await getPrayerTimes();
+            const timesRes = await getPrayerTimes();
+            if (!timesRes.ok) {
+                hapticNotify('error');
+                if (mountedRef.current) setBusy(false);
+                return;
+            }
+            const times = timesRes.data;
             const fajr = parseTimeToToday(times.fajr);
             const maghrib = parseTimeToToday(times.maghrib);
             const now = new Date();
@@ -218,7 +224,13 @@ function FastingTrackerBase({ telegramId }: Props) {
             if (now >= maghrib) {
                 const tomorrow = new Date();
                 tomorrow.setDate(tomorrow.getDate() + 1);
-                const ttimes = await getPrayerTimes(tomorrow);
+                const ttimesRes = await getPrayerTimes(tomorrow);
+                if (!ttimesRes.ok) {
+                    hapticNotify('error');
+                    if (mountedRef.current) setBusy(false);
+                    return;
+                }
+                const ttimes = ttimesRes.data;
                 startTime = parseTimeToToday(ttimes.fajr, tomorrow);
                 endTime = parseTimeToToday(ttimes.maghrib, tomorrow);
             }
