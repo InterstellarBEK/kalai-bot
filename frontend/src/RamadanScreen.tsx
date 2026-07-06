@@ -502,17 +502,13 @@ export default function RamadanScreen() {
             return;
         }
 
-        const s = statusResult.data;
-        setStatus(s);
+        setStatus(statusResult.data);
 
-        if (s.isRamadan) {
-            const timesResult = await getPrayerTimes(new Date(), region, controller.signal);
-            if (!mountedRef.current || controller.signal.aborted) return;
-            if (timesResult.ok) {
-                setAllTimes(timesResult.data);
-            } else {
-                setAllTimes(null);
-            }
+        // Namoz vaqtlari doim yuklanadi — Ramazon bo'lmasa ham
+        const timesResult = await getPrayerTimes(new Date(), region, controller.signal);
+        if (!mountedRef.current || controller.signal.aborted) return;
+        if (timesResult.ok) {
+            setAllTimes(timesResult.data);
         } else {
             setAllTimes(null);
         }
@@ -599,7 +595,6 @@ export default function RamadanScreen() {
 
     if (!status) return null;
 
-    const isLocked = !status.isRamadan;
     const nowLabel = lang === 'ru' ? 'СЕЙЧАС' : lang === 'en' ? 'NOW' : 'HOZIR';
 
     return (
@@ -616,26 +611,22 @@ export default function RamadanScreen() {
                             {t('ram_title')}
                         </h1>
                         <p className="text-[13px] text-stone-500 dark:text-slate-400 font-medium mt-0.5">
-                            {isLocked ? t('ram_sub_locked') : t('ram_sub_active')}
+                            {status.isRamadan ? t('ram_sub_active') : t('ram_sub_locked')}
                         </p>
                     </div>
                     <RegionChip region={region} onClick={openPicker} />
                 </motion.div>
 
-                {isLocked ? (
-                    <LockedView region={region} lang={lang} t={t} />
-                ) : (
-                    <ActiveView
-                        status={status}
-                        allTimes={allTimes}
-                        region={region}
-                        t={t}
-                        lang={lang}
-                        nowLabel={nowLabel}
-                        completed={completed}
-                        onTogglePrayer={togglePrayer}
-                    />
-                )}
+                <ActiveView
+                    status={status}
+                    allTimes={allTimes}
+                    region={region}
+                    t={t}
+                    lang={lang}
+                    nowLabel={nowLabel}
+                    completed={completed}
+                    onTogglePrayer={togglePrayer}
+                />
             </div>
 
             <AnimatePresence>
@@ -725,105 +716,174 @@ function RegionPicker({
     );
 }
 
-function LockedView({ region, lang, t }: { region: Region; lang: Lang; t: (k: string) => string }) {
+// ─── Countdown Hero — Ramazon bo'lmagan davr uchun ─────────
+function CountdownHero({ lang, t }: { lang: Lang; t: (k: string) => string }) {
     const next = getNextRamadan();
     const days = getDaysUntilRamadan();
 
     return (
-        <>
+        <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={SPRING}
+            className="rounded-[1.75rem] p-6 mb-4 relative overflow-hidden"
+            style={{
+                background: 'linear-gradient(135deg, #2E3B8F 0%, #5B6AD0 55%, #7C8AE0 100%)',
+                boxShadow: '0 12px 32px -10px rgba(91, 106, 208, 0.55)',
+            }}
+        >
+            <StarField />
+            <ShimmerOverlay />
             <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={SPRING}
-                className="rounded-[1.75rem] p-6 mb-4 relative overflow-hidden"
-                style={{
-                    background: 'linear-gradient(135deg, #2E3B8F 0%, #5B6AD0 55%, #7C8AE0 100%)',
-                    boxShadow: '0 10px 30px -10px rgba(91, 106, 208, 0.55)',
-                }}
+                className="absolute -top-8 -right-8 opacity-15 select-none"
+                animate={{ rotate: [0, 8, 0] }}
+                transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
             >
-                <StarField />
-                <ShimmerOverlay />
-                <motion.div
-                    className="absolute -top-8 -right-8 opacity-15 select-none"
-                    animate={{ rotate: [0, 8, 0] }}
-                    transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                    <RIcon name="moon" size={150} color="#ffffff" fill="#ffffff" strokeWidth={1.4} />
-                </motion.div>
-                <div className="relative">
-                    <div className="flex items-center gap-2 mb-2">
-                        <LivePulseDot color="#ffffff" size={5} />
-                        <div className="text-white/80 text-[11px] font-extrabold uppercase tracking-wider">
-                            {t('ram_days_until')}
-                        </div>
+                <RIcon name="moon" size={150} color="#ffffff" fill="#ffffff" strokeWidth={1.4} />
+            </motion.div>
+            <div className="relative">
+                <div className="flex items-center gap-2 mb-2">
+                    <LivePulseDot color="#ffffff" size={5} />
+                    <div className="text-white/80 text-[11px] font-extrabold uppercase tracking-wider">
+                        {t('ram_days_until')}
                     </div>
-                    <div className="text-white text-[68px] font-extrabold tabular-nums leading-none">{days}</div>
-                    <div className="text-white/90 text-sm font-extrabold mt-1">{t('ram_days_unit')}</div>
-                    {next && (
+                </div>
+                <div className="text-white text-[68px] font-extrabold tabular-nums leading-none">{days}</div>
+                <div className="text-white/90 text-sm font-extrabold mt-1">{t('ram_days_unit')}</div>
+                {next && (
+                    <div
+                        className="mt-4 inline-block backdrop-blur-md rounded-xl px-3 py-2"
+                        style={{ background: 'rgba(255,255,255,0.15)' }}
+                    >
+                        <div className="text-white/70 text-[9px] font-extrabold uppercase tracking-wider">{t('ram_starts')}</div>
+                        <div className="text-white text-sm font-extrabold">{formatDate(next.start, lang)}</div>
+                    </div>
+                )}
+            </div>
+        </motion.div>
+    );
+}
+
+// ─── Fasting Hero — Ramazon davri uchun ─────────
+function FastingHero({
+    status,
+    t,
+    lang,
+}: {
+    status: RamadanStatus;
+    t: (k: string) => string;
+    lang: Lang;
+}) {
+    const seconds = status.nextEventTime
+        ? Math.max(0, Math.floor((status.nextEventTime.getTime() - Date.now()) / 1000))
+        : 0;
+    const isFasting = status.isFasting;
+    const iftarImminent = status.nextEventLabel === 'iftar' && seconds > 0 && seconds < 30 * 60;
+    const label = iftarImminent
+        ? (lang === 'ru' ? 'СКОРО ИФТАР!' : lang === 'en' ? 'IFTAR SOON!' : "IFTAR YAQIN!")
+        : status.nextEventLabel === 'iftar'
+            ? t('ram_until_iftar')
+            : t('ram_until_sahar');
+    const progress = computeWindowProgress(status);
+    const ramDay = getRamadanDay(new Date());
+
+    const heroGradient = iftarImminent
+        ? 'linear-gradient(135deg, #B84A1F 0%, #E67E1B 55%, #F59E0B 100%)'
+        : isFasting
+            ? 'linear-gradient(135deg, #2E3B8F 0%, #5B6AD0 55%, #7C8AE0 100%)'
+            : 'linear-gradient(135deg, #E67E1B 0%, #F59E0B 55%, #FBBF6E 100%)';
+
+    const haloColor = iftarImminent
+        ? 'rgba(255, 210, 140, 0.55)'
+        : isFasting
+            ? 'rgba(180, 195, 255, 0.42)'
+            : 'rgba(255, 220, 150, 0.48)';
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={SPRING}
+            className="rounded-[1.75rem] p-6 mb-4 relative overflow-hidden"
+            style={{
+                background: heroGradient,
+                boxShadow: iftarImminent
+                    ? '0 14px 36px -10px rgba(230, 126, 27, 0.65)'
+                    : isFasting
+                        ? '0 12px 32px -10px rgba(91, 106, 208, 0.55)'
+                        : '0 12px 32px -10px rgba(245, 158, 11, 0.55)',
+            }}
+        >
+            {isFasting && !iftarImminent ? <StarField /> : null}
+            <ShimmerOverlay />
+            <motion.div
+                className="absolute -top-6 -right-6 opacity-15 select-none"
+                animate={{ rotate: isFasting && !iftarImminent ? [0, 6, 0] : [0, -6, 0] }}
+                transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+            >
+                <RIcon
+                    name={isFasting && !iftarImminent ? 'moon' : 'sunrise'}
+                    size={120}
+                    color="#ffffff"
+                    fill="#ffffff"
+                    strokeWidth={1.4}
+                />
+            </motion.div>
+
+            {/* Ring + inner content */}
+            <div className="relative flex items-center justify-center" style={{ height: 240 }}>
+                <HeroHalo color={haloColor} imminent={iftarImminent} />
+                <CircularRing progress={progress} imminent={iftarImminent} size={240} />
+                <div className="relative z-10 text-center px-4">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                        <LivePulseDot color="#ffffff" size={5} />
+                        <div className="text-white/85 text-[10px] font-extrabold uppercase tracking-widest">{label}</div>
+                    </div>
+                    <LiveCountdown
+                        seconds={seconds}
+                        className="text-white text-[38px] font-extrabold leading-none mb-3"
+                        style={{ letterSpacing: '-0.02em' }}
+                    />
+                    {ramDay !== null && (
                         <div
-                            className="mt-4 inline-block backdrop-blur-md rounded-xl px-3 py-2"
-                            style={{ background: 'rgba(255,255,255,0.15)' }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full backdrop-blur-md"
+                            style={{ background: 'rgba(255,255,255,0.18)' }}
                         >
-                            <div className="text-white/70 text-[9px] font-extrabold uppercase tracking-wider">{t('ram_starts')}</div>
-                            <div className="text-white text-sm font-extrabold">{formatDate(next.start, lang)}</div>
+                            <RIcon name="moon" size={10} color="#ffffff" fill="#ffffff" strokeWidth={1.5} />
+                            <span className="text-white text-[10px] font-extrabold uppercase tracking-wider tabular-nums">
+                                {t('ram_day')} {ramDay}/30
+                            </span>
                         </div>
                     )}
                 </div>
-            </motion.div>
+            </div>
 
-            <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ ...SPRING, delay: 0.05 }}
-                className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-6 mb-4 relative overflow-hidden"
-                style={{ boxShadow: '0 8px 24px -10px rgba(91, 106, 208, 0.12)' }}
-            >
-                <div className="flex flex-col items-center text-center">
-                    <div className="relative">
-                        {/* Bekjon soft glow — sleeping mode */}
-                        <div
-                            className="absolute inset-0 pointer-events-none"
-                            style={{
-                                background: 'radial-gradient(circle, rgba(91,106,208,0.28) 0%, transparent 65%)',
-                                filter: 'blur(18px)',
-                                transform: 'scale(1.4)',
-                            }}
-                        />
-                        <div className="relative" style={{ filter: 'grayscale(0.4) opacity(0.85)' }}>
-                            <Bekjon mood="sleeping" size={90} />
+            {/* Sahar / Iftar chips */}
+            <div className="relative flex gap-2 mt-2">
+                {status.fajrTime && (
+                    <div
+                        className="backdrop-blur-md rounded-2xl px-3 py-2.5 flex-1"
+                        style={{ background: 'rgba(255,255,255,0.16)' }}
+                    >
+                        <div className="text-white/75 text-[9px] font-extrabold uppercase tracking-wider">{t('ram_fajr_ends')}</div>
+                        <div className="text-white text-base font-extrabold tabular-nums">
+                            {status.fajrTime.toTimeString().slice(0, 5)}
                         </div>
                     </div>
-                    <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-100 dark:bg-slate-800/60">
-                        <RIcon name="lock" size={12} color="#78716C" strokeWidth={2} />
-                        <span className="text-stone-600 dark:text-slate-300 text-xs font-extrabold uppercase tracking-wider">
-                            {t('ram_locked_badge')}
-                        </span>
+                )}
+                {status.maghribTime && (
+                    <div
+                        className="backdrop-blur-md rounded-2xl px-3 py-2.5 flex-1"
+                        style={{ background: 'rgba(255,255,255,0.16)' }}
+                    >
+                        <div className="text-white/75 text-[9px] font-extrabold uppercase tracking-wider">{t('ram_iftar')}</div>
+                        <div className="text-white text-base font-extrabold tabular-nums">
+                            {status.maghribTime.toTimeString().slice(0, 5)}
+                        </div>
                     </div>
-                    <div className="text-stone-900 dark:text-slate-100 font-extrabold text-base mt-3">{t('ram_locked_title')}</div>
-                    <div className="text-stone-500 dark:text-slate-400 text-[13px] font-semibold mt-1 leading-relaxed max-w-[280px]">
-                        {t('ram_locked_desc')}
-                    </div>
-                </div>
-            </motion.div>
-
-            <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ ...SPRING, delay: 0.1 }}
-                className="bg-white dark:bg-[#1E252E] rounded-[1.75rem] p-5"
-                style={{ boxShadow: '0 8px 24px -10px rgba(91, 106, 208, 0.12)' }}
-            >
-                <h2 className="text-stone-900 dark:text-slate-100 text-sm font-extrabold uppercase tracking-wider mb-3">
-                    {t('ram_what')}
-                </h2>
-                <div className="space-y-2.5">
-                    <FeatureRow icon="sunrise" color="#EF9F27" label={`${region.name} ${t('ram_feat_countdown')}`} />
-                    <FeatureRow icon="mosque" color="#5B6AD0" label={`${region.name} ${t('ram_feat_prayer')}`} />
-                    <FeatureRow icon="timer" color="#1D9E75" label={t('ram_feat_timer')} />
-                    <FeatureRow icon="bulb" color="#EF9F27" label={t('ram_feat_tips')} />
-                </div>
-            </motion.div>
-        </>
+                )}
+            </div>
+        </motion.div>
     );
 }
 
@@ -850,136 +910,43 @@ function ActiveView({
         ? Math.max(0, Math.floor((status.nextEventTime.getTime() - Date.now()) / 1000))
         : 0;
     const isFasting = status.isFasting;
-    const iftarImminent = status.nextEventLabel === 'iftar' && seconds > 0 && seconds < 30 * 60;
-    const label = iftarImminent
-        ? (lang === 'ru' ? 'СКОРО ИФТАР!' : lang === 'en' ? 'IFTAR SOON!' : "IFTAR YAQIN!")
-        : status.nextEventLabel === 'iftar'
-            ? t('ram_until_iftar')
-            : t('ram_until_sahar');
-    const progress = computeWindowProgress(status);
+    const iftarImminent = status.isRamadan && status.nextEventLabel === 'iftar' && seconds > 0 && seconds < 30 * 60;
     const currentPrayer = getCurrentPrayer(allTimes);
-    const ramDay = getRamadanDay(new Date());
     const doneCount = FARZ_PRAYERS.filter((k) => completed[k]).length;
     const allDone = doneCount === FARZ_PRAYERS.length;
 
+    // Bekjon mood — Ramazon holatiga qarab
     const bekjonMood: 'sleeping' | 'hungry' | 'happy' | 'celebration' = iftarImminent
         ? 'hungry'
-        : isFasting
+        : status.isRamadan && isFasting
             ? 'sleeping'
             : allDone
                 ? 'celebration'
                 : 'happy';
 
-    const heroGradient = iftarImminent
-        ? 'linear-gradient(135deg, #B84A1F 0%, #E67E1B 55%, #F59E0B 100%)'
-        : isFasting
-            ? 'linear-gradient(135deg, #2E3B8F 0%, #5B6AD0 55%, #7C8AE0 100%)'
-            : 'linear-gradient(135deg, #E67E1B 0%, #F59E0B 55%, #FBBF6E 100%)';
-
-    // Halo color matches hero — subtle white sheen
-    const haloColor = iftarImminent
-        ? 'rgba(255, 210, 140, 0.55)'
-        : isFasting
-            ? 'rgba(180, 195, 255, 0.42)'
-            : 'rgba(255, 220, 150, 0.48)';
-
-    // Bekjon tip glow color
     const bekjonGlow = iftarImminent
         ? 'rgba(239, 159, 39, 0.42)'
-        : isFasting
+        : status.isRamadan && isFasting
             ? 'rgba(91, 106, 208, 0.32)'
             : allDone
                 ? 'rgba(29, 158, 117, 0.38)'
                 : 'rgba(239, 159, 39, 0.32)';
 
+    // Tip matni
+    const tipText = iftarImminent
+        ? t('ram_tip_imminent')
+        : status.isRamadan && isFasting
+            ? t('ram_tip_fasting')
+            : t('ram_tip_eating');
+
     return (
         <>
-            {/* ─── HERO — Circular ring countdown ─── */}
-            <motion.div
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={SPRING}
-                className="rounded-[1.75rem] p-6 mb-4 relative overflow-hidden"
-                style={{
-                    background: heroGradient,
-                    boxShadow: iftarImminent
-                        ? '0 14px 36px -10px rgba(230, 126, 27, 0.65)'
-                        : isFasting
-                            ? '0 12px 32px -10px rgba(91, 106, 208, 0.55)'
-                            : '0 12px 32px -10px rgba(245, 158, 11, 0.55)',
-                }}
-            >
-                {isFasting && !iftarImminent ? <StarField /> : null}
-                <ShimmerOverlay />
-                <motion.div
-                    className="absolute -top-6 -right-6 opacity-15 select-none"
-                    animate={{ rotate: isFasting && !iftarImminent ? [0, 6, 0] : [0, -6, 0] }}
-                    transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                    <RIcon
-                        name={isFasting && !iftarImminent ? 'moon' : 'sunrise'}
-                        size={120}
-                        color="#ffffff"
-                        fill="#ffffff"
-                        strokeWidth={1.4}
-                    />
-                </motion.div>
-
-                {/* Ring + inner content */}
-                <div className="relative flex items-center justify-center" style={{ height: 240 }}>
-                    {/* Halo behind ring */}
-                    <HeroHalo color={haloColor} imminent={iftarImminent} />
-                    <CircularRing progress={progress} imminent={iftarImminent} size={240} />
-                    <div className="relative z-10 text-center px-4">
-                        <div className="flex items-center justify-center gap-2 mb-2">
-                            <LivePulseDot color="#ffffff" size={5} />
-                            <div className="text-white/85 text-[10px] font-extrabold uppercase tracking-widest">{label}</div>
-                        </div>
-                        <LiveCountdown
-                            seconds={seconds}
-                            className="text-white text-[38px] font-extrabold leading-none mb-3"
-                            style={{ letterSpacing: '-0.02em' }}
-                        />
-                        {ramDay !== null && (
-                            <div
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full backdrop-blur-md"
-                                style={{ background: 'rgba(255,255,255,0.18)' }}
-                            >
-                                <RIcon name="moon" size={10} color="#ffffff" fill="#ffffff" strokeWidth={1.5} />
-                                <span className="text-white text-[10px] font-extrabold uppercase tracking-wider tabular-nums">
-                                    {t('ram_day')} {ramDay}/30
-                                </span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Sahar / Iftar chips */}
-                <div className="relative flex gap-2 mt-2">
-                    {status.fajrTime && (
-                        <div
-                            className="backdrop-blur-md rounded-2xl px-3 py-2.5 flex-1"
-                            style={{ background: 'rgba(255,255,255,0.16)' }}
-                        >
-                            <div className="text-white/75 text-[9px] font-extrabold uppercase tracking-wider">{t('ram_fajr_ends')}</div>
-                            <div className="text-white text-base font-extrabold tabular-nums">
-                                {status.fajrTime.toTimeString().slice(0, 5)}
-                            </div>
-                        </div>
-                    )}
-                    {status.maghribTime && (
-                        <div
-                            className="backdrop-blur-md rounded-2xl px-3 py-2.5 flex-1"
-                            style={{ background: 'rgba(255,255,255,0.16)' }}
-                        >
-                            <div className="text-white/75 text-[9px] font-extrabold uppercase tracking-wider">{t('ram_iftar')}</div>
-                            <div className="text-white text-base font-extrabold tabular-nums">
-                                {status.maghribTime.toTimeString().slice(0, 5)}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </motion.div>
+            {/* ─── HERO — Ramazon bo'lsa ro'za countdown, bo'lmasa Ramazongacha kunlar ─── */}
+            {status.isRamadan ? (
+                <FastingHero status={status} t={t} lang={lang} />
+            ) : (
+                <CountdownHero lang={lang} t={t} />
+            )}
 
             {/* ─── Prayer times card with completion tracking ─── */}
             {allTimes && (
@@ -1080,11 +1047,7 @@ function ActiveView({
                             </div>
                         </div>
                         <div className="text-stone-700 dark:text-slate-300 text-[13px] font-semibold leading-relaxed">
-                            {iftarImminent
-                                ? t('ram_tip_imminent')
-                                : isFasting
-                                    ? t('ram_tip_fasting')
-                                    : t('ram_tip_eating')}
+                            {tipText}
                         </div>
                     </div>
                 </div>
@@ -1350,19 +1313,5 @@ function DuasCard({ t, lang, defaultTab }: { t: (k: string) => string; lang: Lan
                 </motion.div>
             </AnimatePresence>
         </motion.div>
-    );
-}
-
-function FeatureRow({ icon, color, label }: { icon: RIconName; color: string; label: string }) {
-    return (
-        <div className="flex items-center gap-3 rounded-xl px-3 py-2.5 bg-stone-50 dark:bg-slate-800/50">
-            <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                style={{ background: color + '22' }}
-            >
-                <RIcon name={icon} size={18} color={color} fill={color + '33'} strokeWidth={2} />
-            </div>
-            <span className="text-stone-700 dark:text-slate-300 text-[13px] font-bold">{label}</span>
-        </div>
     );
 }
