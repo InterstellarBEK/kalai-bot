@@ -162,11 +162,90 @@ def analyze_nutrition_label(image_path: str, max_retries: int = 3) -> dict:
     raise last_error
 
 
+BARCODE_PROMPT = """Sen oziq-ovqat mahsulotlari nutrition ma'lumotlar bazasi eksperti.
+Faqat barcode raqami berilgan (EAN-13 yoki UPC): {barcode}
+
+VAZIFA: Bu barcode qaysi mahsulotga tegishli ekanini eng katta ehtimol bilan aniqla va 100g (yoki 100ml) uchun nutrition qiymatlarni qaytar.
+
+QOIDALAR:
+- Barcode prefiksi ma'lumot beradi: 46/49 → Rossiya, 48 → O'zbekiston, 40-44 → Germaniya, 50 → UK, boshqa raqamlar — global.
+- Faqat aniq bilgan yoki juda katta ishonch bilan tikkan mahsulot bo'lsa javob qaytar.
+- Agar barcode noaniq yoki mahsulot noma'lum bo'lsa — aynan: {{"error": "unknown_barcode"}}
+- product_name'ni {lang_label} qaytar.
+
+Faqat JSON:
+{{
+  "product_name": "mahsulot nomi",
+  "brand": "brend yoki null",
+  "kcal_per_100g": 250,
+  "protein_per_100g": 8.5,
+  "fat_per_100g": 12.0,
+  "carbs_per_100g": 30.0,
+  "confidence": "high"
+}}
+
+- kcal_per_100g: butun son (10-900)
+- protein/fat/carbs_per_100g: bir kasr aniqligida (0-100)
+- confidence: "high" | "medium" | "low"
+"""
+
+BARCODE_LANG_LABEL = {
+    "uz": "o'zbek tilida (lotin, kichik harflar)",
+    "ru": "rus tilida (kichik harflar)",
+    "en": "ingliz tilida (lowercase)",
+}
+
+
+def analyze_barcode_to_product(barcode: str, lang: str = "uz", max_retries: int = 3) -> dict:
+    """Barcode raqamidan Gemini bilan mahsulotni aniqlash (matn only, rasm yo'q).
+
+    Returns: {product_name, brand, kcal_per_100g, protein_per_100g,
+              fat_per_100g, carbs_per_100g, confidence} yoki {"error": "unknown_barcode"}
+    """
+    lang_key = lang if lang in BARCODE_LANG_LABEL else "uz"
+    prompt = BARCODE_PROMPT.format(
+        barcode=barcode,
+        lang_label=BARCODE_LANG_LABEL[lang_key],
+    )
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=[prompt],
+                config=GENERATION_CONFIG,
+            )
+            text = response.text.strip()
+            if text.startswith("```"):
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+                text = text.strip()
+            return json.loads(text)
+        except Exception as e:
+            last_error = e
+            err = str(e)
+            if any(code in err for code in ("503", "UNAVAILABLE", "500")):
+                if attempt < max_retries - 1:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+            raise
+
+    raise last_error
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Foydalanish: python gemini_food.py <rasm_yo'li> [--label]")
+        print("Foydalanish: python gemini_food.py <rasm_yo'li> [--label]  yoki  python gemini_food.py --barcode <raqam> [uz|ru|en]")
         sys.exit(1)
-    if len(sys.argv) >= 3 and sys.argv[2] == "--label":
+    if sys.argv[1] == "--barcode":
+        if len(sys.argv) < 3:
+            print("Barcode raqamini kiriting")
+            sys.exit(1)
+        bc_lang = sys.argv[3] if len(sys.argv) >= 4 else "uz"
+        result = analyze_barcode_to_product(sys.argv[2], bc_lang)
+    elif len(sys.argv) >= 3 and sys.argv[2] == "--label":
         result = analyze_nutrition_label(sys.argv[1])
     else:
         result = analyze_food_image(sys.argv[1])

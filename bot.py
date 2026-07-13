@@ -15,7 +15,7 @@ from aiohttp import web
 import aiohttp
 from auth import register_auth_routes
 
-from gemini_food import analyze_food_image, analyze_nutrition_label
+from gemini_food import analyze_food_image, analyze_nutrition_label, analyze_barcode_to_product
 from p2p_handlers import setup_p2p, handle_p2p_receipt_photo
 from admin_handlers import setup_admin
 from support_handlers import setup_support
@@ -640,6 +640,25 @@ async def analyze_label_endpoint(request):
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+async def analyze_barcode_endpoint(request):
+    """Barcode raqamidan Gemini bilan mahsulotni aniqlash (kamerasiz oqim).
+    Body: {barcode: str, lang?: 'uz'|'ru'|'en'}
+    """
+    try:
+        data = await request.json()
+        barcode = str(data.get("barcode", "")).strip()
+        lang_raw = data.get("lang", "uz")
+        lang = "ru" if lang_raw == "ru" else "en" if lang_raw == "en" else "uz"
+
+        if not barcode or not barcode.isdigit() or not (8 <= len(barcode) <= 14):
+            return web.json_response({"error": "invalid_barcode"}, status=400)
+
+        result = await asyncio.to_thread(analyze_barcode_to_product, barcode, lang)
+        return web.json_response(result)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
 
 
 # ============ CLICK payment endpoints ============
@@ -1281,6 +1300,7 @@ async def start_web():
     app.router.add_get("/health", health)
     app.router.add_post("/api/analyze-food", analyze_food_endpoint)
     app.router.add_post("/api/analyze-label", analyze_label_endpoint)
+    app.router.add_post("/api/analyze-barcode", analyze_barcode_endpoint)
     app.router.add_post("/api/create-invoice", create_invoice_endpoint)
     app.router.add_post("/api/click/create-invoice", click_create_invoice_endpoint)
     app.router.add_post("/click/prepare", click_prepare_endpoint)
